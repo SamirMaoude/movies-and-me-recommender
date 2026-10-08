@@ -130,8 +130,66 @@ départagés par `movieId` croissant pour rendre les sorties reproductibles.
 Ce choix privilégie arbitrairement les petits IDs et n'est pas un indicateur
 de qualité. La baseline fonctionne, mais sa qualité prédictive reste à évaluer.
 
-La prochaine étape recommandée est la **phase 3 : mapping MovieLens ↔ TMDB**,
-avec traitement des IDs absents et de la collision documentée en phase 1.
+Cette version reste disponible pour les essais avec les IDs MovieLens.
+La version utilisant les IDs de l'application est décrite ci-dessous.
+
+## Phase 3 : IDs TMDB
+
+[src/data/id_mapper.py](src/data/id_mapper.py) lit les correspondances de
+`links.csv`. Il permet de retrouver un ID TMDB à partir d'un film MovieLens,
+ou de faire le chemin inverse. Un ID absent renvoie `None`.
+
+```python
+from src.data.exploration import load_movielens
+from src.data.id_mapper import IdMapper
+from src.models.content_based import ContentBasedRecommender
+from src.models.tmdb_recommender import TMDBRecommender
+
+tables = load_movielens("data/raw")
+mapper = IdMapper(tables["links"])
+
+print(mapper.to_tmdb_id(2571))  # 603 : Matrix
+print(mapper.to_movie_id(603))  # 2571
+
+recommender = TMDBRecommender(ContentBasedRecommender(tables["movies"]), mapper)
+recommendations = recommender.recommend(
+    favorite_tmdb_ids=[27205, 157336, 155, 603],
+    n=10,
+)
+print(recommendations)
+# [{"tmdb_id": 5550, "score": 0.9497038041238557}, ...]
+```
+
+[src/models/tmdb_recommender.py](src/models/tmdb_recommender.py) utilise le
+même calcul par genres, avec des IDs TMDB en entrée et en sortie. Le résultat
+est une liste de dictionnaires contenant `tmdb_id` et `score`. Chaque film
+apparaît une seule fois, et les favoris sont exclus.
+
+Les IDs TMDB inconnus, ou liés à des films absents du modèle, sont ignorés.
+S'il ne reste aucun favori connu, la liste est vide. Elle est aussi vide si
+les favoris n'ont aucun genre utilisable. Répéter un favori ne change pas les
+scores. Les IDs et `n` doivent être des nombres entiers positifs ; les valeurs
+incorrectes provoquent une `ValueError`.
+
+Les films sans ID TMDB et les doublons sont retirés avant de limiter les
+résultats à `n`. Un film sans lien ne prend donc pas la place d'un résultat
+que l'application pourrait afficher.
+
+L'ID TMDB **4912** correspond aux MovieLens **6003 et 144606**. Le mapping
+choisit le plus petit ID MovieLens ; pour les recommandations, il choisit le
+plus petit présent dans le modèle. Les deux correspondances restent visibles
+avec `mapper.movie_ids_for_tmdb(4912)` et `mapper.ambiguous_mappings`. Si cet
+ID TMDB est un favori, aucune de ses deux entrées ne revient dans les résultats.
+Ce choix est une règle locale : les fichiers fournis ne permettent pas de
+confirmer laquelle des deux entrées décrit correctement le film.
+
+La section TMDB du notebook de baseline montre cet exemple et les cas d'IDs
+absents. Les tests sont dans [tests/test_id_mapper.py](tests/test_id_mapper.py)
+et [tests/test_tmdb_recommender.py](tests/test_tmdb_recommender.py). Aucun appel
+à l'API TMDB et aucune nouvelle dépendance ne sont nécessaires.
+
+La prochaine étape est la **phase 4 : évaluation**, pour comparer cette
+baseline à un classement par popularité avec Recall@10 et NDCG@10.
 
 ## Reproduire l'analyse
 
