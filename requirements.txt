@@ -4,3 +4,5 @@ matplotlib==3.11.2
 jupyterlab==4.6.4
 ipykernel==7.4.0
 nbconvert==7.17.1
+# Sparse TF-IDF features and cosine similarity for the phase 2 baseline.
+scikit-learn==1.9.1
