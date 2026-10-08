@@ -1,0 +1,6 @@
+# Analysis, notebook UI, kernel, and headless execution (validated on Python 3.12).
+pandas==3.0.6
+matplotlib==3.11.2
+jupyterlab==4.6.4
+ipykernel==7.4.0
+nbconvert==7.17.1
