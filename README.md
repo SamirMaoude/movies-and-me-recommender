@@ -1,8 +1,13 @@
 # Movies & Me Recommender
 
-Backend/ML séparé de l'application Movies-And-Me. L'objectif est de construire
-progressivement un recommender dont les résultats pourront être exposés avec
-des identifiants TMDB.
+Backend/ML séparé de l'application Movies-And-Me. Le projet s'oriente désormais
+vers le modèle ALS fourni par `implicit` pour se concentrer sur le MLOps :
+entraînement reproductible, évaluation, déploiement et suivi en production.
+L'API utilisera des identifiants TMDB.
+
+La [feuille de route](ROADMAP.md) décrit cette nouvelle direction. Les phases
+1 à 3 sont réalisées ; la prochaine étape est l'évaluation, avant d'ajouter ALS.
+Le modèle par genres reste disponible comme référence pour les comparaisons.
 
 ## Phase 1 : exploration de MovieLens
 
