@@ -193,8 +193,73 @@ absents. Les tests sont dans [tests/test_id_mapper.py](tests/test_id_mapper.py)
 et [tests/test_tmdb_recommender.py](tests/test_tmdb_recommender.py). Aucun appel
 à l'API TMDB et aucune nouvelle dépendance ne sont nécessaires.
 
-La prochaine étape est la **phase 4 : évaluation**, pour comparer cette
-baseline à un classement par popularité avec Recall@10 et NDCG@10.
+## Phase 4 en cours : préparer l'évaluation
+
+[src/evaluation/data.py](src/evaluation/data.py) prépare les interactions
+et les sépare dans le temps. Une note **supérieure ou égale à 4/5** compte
+comme un avis positif. Le seuil est configurable. Les notes plus faibles sont
+conservées pour pouvoir exclure les films déjà vus des recommandations.
+
+Les films sont reliés à TMDB avec la règle de la phase 3. Pour une même paire
+utilisateur/film TMDB, on garde la première interaction, puis le plus petit
+ID MovieLens d'origine en cas d'égalité de date. Une meilleure note ultérieure
+ne remplace pas la première. Ce choix évite de placer le même film dans
+l'historique et dans les réponses attendues sous deux IDs différents ; il
+ne cherche pas à représenter les changements d'avis.
+
+Les dates sont fixées dans [config/evaluation.json](config/evaluation.json).
+Elles correspondent aux quantiles temporels proches de 80 % et 90 %, calculés
+une fois sur les interactions préparées, avec la méthode `nearest`. Leur
+choix utilise les dates et les volumes, sans mesurer la qualité d'un modèle.
+La commande ne recalcule pas ces coupures lorsqu'on la relance.
+
+| Groupe | Période UTC | Interactions | Avis positifs |
+|---|---|---:|---:|
+| Apprentissage | Avant le 22 mars 2016 à 08:26:11 | 80 657 | 39 251 |
+| Validation | À partir de cette date, avant le 21 juin 2017 à 07:17:25 | 10 082 | 5 197 |
+| Test | À partir du 21 juin 2017 à 07:17:25 | 10 083 | 4 127 |
+
+Ces dates sont communes à tous les utilisateurs. Une interaction exactement
+à la date de coupure appartient au groupe suivant. Aucune sélection des
+utilisateurs selon leur activité future n'est appliquée.
+
+Depuis la racine du dépôt, produire le
+[rapport de préparation](reports/evaluation_data.json) avec :
+
+```powershell
+.\.venv\Scripts\python.exe -m src.evaluation.prepare
+```
+
+La commande lit les CSV bruts et écrit seulement le rapport JSON. Les fonctions
+de préparation renvoient les tables pour la suite. Le rapport conserve le
+seuil, les dates, les empreintes des sources et les comptes des lignes retirées :
+**13 notes sans ID TMDB** et **1 interaction ultérieure sur le même film**.
+Il reste **100 822 interactions**, dont **48 575 avis positifs**. Les CSV
+bruts et les notebooks ne sont pas modifiés.
+
+### Limite du découpage
+
+Le catalogue de comparaison prévu comprend les **5 223 films** avec au moins
+un avis positif dans l'apprentissage. Dans la validation, **4 595 avis
+positifs sur 5 197 (88,4 %)** concernent ces films ; les **602 autres** sont
+hors de ce catalogue.
+
+La présence d'un film dans le catalogue ne garantit pas que son utilisateur
+dispose déjà de favoris connus. Seuls **20 des 62 utilisateurs** de validation
+ont à la fois un historique positif dans l'apprentissage et au moins une
+cible positive dans ce catalogue. Cela représente **333 cibles**, soit
+**6,4 %** des avis positifs de validation. La future comparaison sur ce groupe
+sera donc limitée à un petit échantillon. Les autres cas restent présents
+dans les tables et comptés dans le rapport.
+
+Les tests de préparation et de couverture sont dans
+[tests/test_evaluation_data.py](tests/test_evaluation_data.py) et
+[tests/test_evaluation_prepare.py](tests/test_evaluation_prepare.py).
+À ce stade, le test final est décrit par ses volumes uniquement ; aucune
+performance de recommandation n'est calculée.
+
+La suite de la phase 4 est le classement par popularité, puis le calcul de
+Recall@10 et NDCG@10 sur la validation avec un protocole commun aux modèles.
 
 ## Reproduire l'analyse
 

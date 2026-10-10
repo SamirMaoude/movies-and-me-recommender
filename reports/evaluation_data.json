@@ -1,0 +1,81 @@
+{
+  "config": {
+    "positive_threshold": 4.0,
+    "train_end": "2016-03-22T08:26:11+00:00",
+    "validation_end": "2017-06-21T07:17:25+00:00"
+  },
+  "policies": {
+    "positive_feedback": "rating >= positive_threshold",
+    "missing_tmdb": "exclude and count",
+    "canonical_movie_id": "smallest MovieLens ID declared in links for each TMDB ID",
+    "duplicate_user_movie": "earliest timestamp, then smallest source movieId",
+    "cutoff_boundaries": "equal timestamps belong to the next split",
+    "test_usage": "descriptive data counts only; no model evaluation"
+  },
+  "sources": {
+    "ratings.csv": {
+      "sha256": "aa289ca83157595d0df6aea1be6a4ded676ddc4385472e8313a8ed9805352646"
+    },
+    "links.csv": {
+      "sha256": "97ad18e4e56a09363c65676b6cb3482ce3e2cea2372a24620c1599c843325f31"
+    }
+  },
+  "preparation": {
+    "input_ratings": 100836,
+    "ratings_without_tmdb": 13,
+    "ratings_with_tmdb": 100823,
+    "remapped_ratings": 1,
+    "duplicate_user_movies_removed": 1,
+    "prepared_interactions": 100822,
+    "positive_interactions": 48575,
+    "other_interactions": 52247,
+    "users": 610,
+    "movies": 9715,
+    "ambiguous_tmdb_ids": 1
+  },
+  "splits": {
+    "train": {
+      "interactions": 80657,
+      "positive_interactions": 39251,
+      "other_interactions": 41406,
+      "users": 522,
+      "movies": 7859,
+      "first_interaction": "1996-03-29T18:36:55+00:00",
+      "last_interaction": "2016-03-22T08:26:02+00:00"
+    },
+    "validation": {
+      "interactions": 10082,
+      "positive_interactions": 5197,
+      "other_interactions": 4885,
+      "users": 62,
+      "movies": 3260,
+      "first_interaction": "2016-03-22T08:26:11+00:00",
+      "last_interaction": "2017-06-21T07:17:01+00:00"
+    },
+    "test": {
+      "interactions": 10083,
+      "positive_interactions": 4127,
+      "other_interactions": 5956,
+      "users": 74,
+      "movies": 4426,
+      "first_interaction": "2017-06-21T07:17:25+00:00",
+      "last_interaction": "2018-09-24T14:27:30+00:00"
+    }
+  },
+  "validation_coverage": {
+    "reference": "positive train interactions only",
+    "candidate_movies": 5223,
+    "positive_targets": 5197,
+    "users_with_positive_targets": 62,
+    "users_with_positive_history": 21,
+    "eligible_users": 20,
+    "positive_targets_in_catalog": 4595,
+    "positive_targets_outside_catalog": 602,
+    "targets_known_user_known_movie": 333,
+    "targets_known_user_unknown_movie": 78,
+    "targets_unknown_user_known_movie": 4262,
+    "targets_unknown_user_unknown_movie": 524,
+    "catalog_coverage": 0.8841639407350395,
+    "eligible_user_coverage": 0.3225806451612903
+  }
+}
