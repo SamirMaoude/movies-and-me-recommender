@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches: [main, chore/docker, ci/github-actions]
+    branches: [main, chore/docker, ci/github-actions, ci/deployment]
   workflow_dispatch:
 
 permissions:
@@ -68,13 +68,17 @@ jobs:
       - name: Train a small model for the API check
         run: python scripts/create_smoke_model.py --output "$RUNNER_TEMP/smoke-model"
       - name: Build the CPU image
-        run: docker build --pull --tag movies-me-api:ci .
+        run: |
+          docker build --pull --target deployment \
+            --build-context "model=$RUNNER_TEMP/smoke-model" \
+            --build-arg "VCS_REF=$GITHUB_SHA" \
+            --tag movies-me-api:ci .
       - name: Start the API with the synthetic model
         run: |
           docker run --detach --name movies-me-api-ci \
             --publish 127.0.0.1:8000:8000 \
-            --env MODEL_URI=/models/current \
-            --mount "type=bind,source=$RUNNER_TEMP/smoke-model,target=/models/current,readonly" \
+            --read-only --tmpfs /tmp:rw,noexec,nosuid,size=64m \
+            --cap-drop ALL --security-opt no-new-privileges \
             movies-me-api:ci
       - name: Check the running API
         run: python scripts/check_api.py --url http://127.0.0.1:8000

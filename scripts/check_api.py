@@ -27,7 +27,12 @@ def require(condition: bool, message: str) -> None:
         raise RuntimeError(message)
 
 
-def check(url: str, favorites: list[int], timeout: float) -> None:
+def check(
+    url: str,
+    favorites: list[int],
+    timeout: float,
+    expected_run_id: str | None = None,
+) -> None:
     deadline = time.monotonic() + timeout
     last_error = "No response"
     while True:
@@ -44,6 +49,12 @@ def check(url: str, favorites: list[int], timeout: float) -> None:
 
     status, identity = request(url, "/model/info")
     require(status == 200 and bool(identity.get("model_uri")), "Missing model identity")
+    if expected_run_id is not None:
+        require(
+            identity.get("run_id") == expected_run_id,
+            f"Unexpected model run_id: expected {expected_run_id!r}, "
+            f"got {identity.get('run_id')!r}",
+        )
     status, response = request(
         url,
         "/recommendations",
@@ -90,10 +101,13 @@ def main() -> None:
     parser.add_argument("--url", default="http://127.0.0.1:8000")
     parser.add_argument("--timeout", type=float, default=60)
     parser.add_argument("--favorite-id", type=int, action="append")
+    parser.add_argument(
+        "--expected-run-id", help="Require this MLflow run ID in /model/info"
+    )
     args = parser.parse_args()
     if args.timeout <= 0:
         parser.error("--timeout must be positive")
-    check(args.url, args.favorite_id or [100], args.timeout)
+    check(args.url, args.favorite_id or [100], args.timeout, args.expected_run_id)
 
 
 if __name__ == "__main__":
