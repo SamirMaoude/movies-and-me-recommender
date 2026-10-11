@@ -9,7 +9,9 @@ La [feuille de route](ROADMAP.md) décrit cette direction. Les phases 1 à 6
 sont réalisées : ALS est entraîné, comparé aux références et rechargeable
 à partir de ses fichiers ou d'une version du registre MLflow. Chaque essai
 conserve les informations sur le code, les données et l'environnement.
-La prochaine étape est le versionnement des données et du pipeline avec DVC.
+La phase 7 ajoute le suivi des données et du pipeline avec DVC. Le stockage
+local permet de vérifier la récupération ; un stockage partagé reste à
+configurer pour une autre machine et la CI.
 Le modèle par genres reste disponible pour les comparaisons.
 
 ## Phase 1 : exploration de MovieLens
@@ -421,8 +423,9 @@ La commande sauvegarde l'essai ALS retenu dans `artifacts/implicit-als/`.
 Ce dossier contient les facteurs, la matrice d'apprentissage, les IDs, le
 classement de popularité et un manifeste avec configuration, métadonnées
 et empreintes. Le chargement contrôle leur cohérence et ne lit aucun CSV.
-`artifacts/` est ignoré par Git ; une nouvelle copie du dépôt doit entraîner
-le modèle pour obtenir ces fichiers.
+`artifacts/` est ignoré par Git. Le pipeline DVC décrit plus bas conserve
+sa propre sortie de modèle ; les fichiers d'un run MLflow peuvent aussi être
+rechargés avec le module de registre.
 
 ```python
 from src.models.collaborative import ImplicitRecommender
@@ -592,7 +595,149 @@ La version locale **1** de `movies-and-me-als` a été enregistrée avec l'alias
 `champion`. Les tests de [tests/test_registry.py](tests/test_registry.py)
 couvrent le chargement local et distant, l'enregistrement, les changements
 d'alias, les recommandations et le rejet des modèles incohérents ou issus
-d'un run inachevé. La phase 6 est terminée ; la phase 7 portera sur DVC.
+d'un run inachevé. La phase 6 est terminée.
+
+## Phase 7 : données et pipeline avec DVC
+
+Le dépôt est initialisé avec **DVC 3.67.1**, dont la version est fixée dans
+[requirements.txt](requirements.txt). Pour installer les dépendances dans
+une nouvelle copie du projet, depuis la racine avec `.venv` activé :
+
+```bat
+python -m pip install -r requirements.txt
+dvc --version
+python -m pip check
+```
+
+`dvc init` a déjà été exécuté : il ne faut pas le relancer après un clonage.
+Git conserve `.dvc/config`, `.dvc/.gitignore` et `.dvcignore`. Le cache et
+la configuration propre à cette machine restent hors de Git.
+
+### Retrouver les données
+
+Les quatre CSV MovieLens restent dans `data/raw/`, avec le même contenu.
+Ils sont suivis par leurs fichiers `.dvc` : `movies.csv.dvc`,
+`ratings.csv.dvc`, `links.csv.dvc` et `tags.csv.dvc`. Git conserve ces
+descriptions et la [source et licence](data/raw/README.md), tandis que DVC
+conserve les CSV dans son cache et dans le stockage configuré. Les anciennes
+versions des CSV restent présentes dans l'historique Git.
+
+Le stockage actuellement configuré est un dossier local en dehors du dépôt.
+Son adresse est enregistrée dans `.dvc/config.local`, ignoré par Git. Dans
+une nouvelle copie sur ce PC, il faut donc configurer ce stockage avant le
+premier `dvc pull`.
+
+```bat
+dvc remote add --local -d local C:/dev/movies-and-me-recommender-dvc-storage
+dvc pull
+dvc status
+```
+
+Le chemin doit désigner le dossier qui contient déjà les données envoyées
+avec `dvc push`. La commande `pull` récupère les CSV et les sorties du
+pipeline disponibles pour la version Git courante. Elle ne récupère ni le
+code ni les fichiers de configuration : ceux-ci viennent de Git.
+[Documentation DVC](https://doc.dvc.org/command-reference/pull).
+
+Ce dossier local suffit aux essais sur ce PC. Pour travailler sur une autre
+machine ou dans la CI, il faudra un stockage partagé, puis y envoyer les
+données et les sorties avec `dvc push`. L'adresse du stockage et ses
+identifiants doivent être configurés dans chaque environnement ; les
+identifiants restent hors du dépôt. L'option `--local` permet de garder
+cette configuration dans `.dvc/config.local`.
+[Configuration des stockages DVC](https://doc.dvc.org/command-reference/remote/add).
+
+Amazon S3 est une possibilité pour ce stockage partagé ; aucun bucket n'est
+configuré pour le moment. Une fois le bucket créé et un profil AWS nommé
+`movies-and-me` configuré sur le PC, remplacer `NOM_DU_BUCKET` dans ces
+commandes :
+
+```bat
+python -m pip install "dvc[s3]==3.67.1"
+dvc remote add -d cloud s3://NOM_DU_BUCKET/movies-and-me-recommender
+dvc remote modify --local cloud profile movies-and-me
+dvc push -r cloud
+```
+
+L'adresse du bucket sera alors dans `.dvc/config`, à conserver dans Git.
+Le profil est choisi localement et les clés d'accès restent dans la
+configuration AWS. Le stockage local reste disponible avec `-r local`.
+Avant de remplacer ce stockage pour les prochaines étapes, vérifier un
+`dvc pull -r cloud` depuis une nouvelle copie du dépôt.
+Après cette vérification, `dvc remote default --local cloud` permet de
+choisir le cloud par défaut sur ce PC à la place du dossier local.
+[DVC avec Amazon S3](https://doc.dvc.org/user-guide/data-management/remote-storage/amazon-s3).
+
+### Relancer le pipeline
+
+[dvc.yaml](dvc.yaml) décrit deux étapes, exécutées dans cet ordre :
+
+| Étape | Travail effectué | Sorties |
+|---|---|---|
+| `prepare` | Vérifier les données et décrire leur séparation temporelle | `artifacts/dvc/evaluation.json`, `reports/dvc/data.json` |
+| `train` | Entraîner les trois essais ALS, les comparer aux références et sauvegarder l'essai retenu | `artifacts/dvc/model/`, `reports/dvc/comparison.json`, `reports/dvc/metrics.json` |
+
+Les commandes de [src/pipeline/run.py](src/pipeline/run.py) réutilisent la
+préparation et l'entraînement existants. Le choix des paramètres utilise
+toujours la validation ; le modèle reste entraîné sur l'apprentissage
+uniquement. Le test final reste réservé à une étape ultérieure.
+
+```bat
+dvc repro
+dvc metrics show
+python -m src.models.registry recommend --model-uri artifacts/dvc/model --favorites 27205 157336 155 603 --n 10
+```
+
+Les paramètres sont dans [params.yaml](params.yaml) : `evaluation` conserve
+le seuil positif et les deux dates de coupure ; `als` définit les essais et
+la limite de recommandations ; `tracking.uri` désigne la base MLflow.
+Changer un paramètre ou une dépendance de code ou de données provoque la
+reprise des étapes concernées au prochain `dvc repro`.
+
+[.gitattributes](.gitattributes) fixe les fins de ligne du code et des
+paramètres à LF. Leurs empreintes restent ainsi les mêmes après un clonage
+sous Windows ou Linux. Les CSV récupérés par DVC conservent leurs octets
+d'origine.
+
+Le cache DVC conserve le modèle, la configuration générée et les rapports
+détaillés. [dvc.lock](dvc.lock) relie leurs empreintes aux données, au code
+et aux paramètres de chaque étape. Le fichier
+`reports/dvc/metrics.json` contient les métriques sans durées ni identifiants
+de runs ; il est conservé dans Git pour faciliter leur comparaison. Le
+rapport complet reste suivi par DVC, avec les identifiants MLflow et les
+durées propres à son exécution.
+
+Si les entrées et les sorties sont déjà à jour, `dvc repro` ne relance pas
+l'entraînement et ne crée aucun run MLflow. Pour refaire les calculs :
+
+```bat
+dvc repro --force
+dvc push
+git status
+```
+
+Cette relance crée de nouveaux runs et de nouvelles durées, même si les
+scores sont les mêmes. Elle met à jour `dvc.lock` ; ce fichier et les
+métriques sont à committer avec les changements du pipeline ou des
+paramètres. [Fonctionnement de `dvc repro`](https://doc.dvc.org/command-reference/repro).
+
+Pour relancer ces étapes, passer par DVC : il gère les sorties déclarées
+dans `dvc.yaml`. Les commandes Python appelées directement refusent
+d'écraser des sorties déjà présentes.
+
+Une variable `MLFLOW_TRACKING_URI` définie dans le terminal prend le pas sur
+`tracking.uri`. DVC ne surveille pas les changements de variables
+d'environnement : utiliser `dvc repro --force` si seul ce choix a changé.
+Le pipeline n'enregistre aucune version dans le Model Registry et ne
+déplace pas l'alias `champion`. L'enregistrement reste une commande
+distincte, décrite dans la phase 6.
+
+La vérification locale a récupéré les quatre CSV dans un dossier neuf avec
+un cache vide, avec les mêmes SHA-256. Le pipeline a ensuite été exécuté
+depuis un clone propre. Une seconde exécution sans changement a été sautée ;
+une relance forcée a retrouvé les mêmes métriques et un modèle rechargeable,
+sans changer `champion`. Les 216 tests passent. L'accès depuis une autre
+machine et la CI reste à vérifier avec un stockage partagé.
 
 ## Reproduire l'analyse
 
@@ -602,6 +747,9 @@ Depuis la racine du dépôt, avec **Python 3.12**, sous PowerShell :
 # À la première installation uniquement.
 py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
+
+# Après configuration du stockage DVC décrit dans la phase 7.
+.\.venv\Scripts\python.exe -m dvc pull
 
 # Exécuter toutes les cellules et sauvegarder leurs résultats dans le notebook.
 .\.venv\Scripts\python.exe -m jupyter nbconvert --to notebook --execute --inplace --ExecutePreprocessor.timeout=120 notebooks\01_exploration.ipynb

@@ -1,0 +1,224 @@
+schema: '2.0'
+stages:
+  prepare:
+    cmd: python -m src.pipeline.run prepare
+    deps:
+    - path: .gitattributes
+      hash: md5
+      md5: 9037a368301a0b260dfc8bb631baa166
+      size: 190
+    - path: data/raw/links.csv
+      hash: md5
+      md5: 316913f95cdad64c745ca22f3630e230
+      size: 197979
+    - path: data/raw/movies.csv
+      hash: md5
+      md5: ed94fab72b62442ef8150d9446e000d6
+      size: 494431
+    - path: data/raw/ratings.csv
+      hash: md5
+      md5: 325a6f09399d1c45671f187505e1a100
+      size: 2483723
+    - path: data/raw/tags.csv
+      hash: md5
+      md5: 1b2d21a7be1cc23d327b11155a4a6aea
+      size: 118660
+    - path: requirements.txt
+      hash: md5
+      md5: 769f6b9f22b3cac867531bf3dd3cf919
+      size: 534
+    - path: src/__init__.py
+      hash: md5
+      md5: 19c9c4aaeffe4e5084f65cb2191d1efa
+      size: 49
+    - path: src/data/__init__.py
+      hash: md5
+      md5: b113d2daf56dec92b97f36ddfd746b95
+      size: 58
+    - path: src/data/exploration.py
+      hash: md5
+      md5: 19329cc38e8d3727dea1e49a385180b6
+      size: 4877
+    - path: src/data/id_mapper.py
+      hash: md5
+      md5: af7721e21eb6e38760d5a4e604798e91
+      size: 4306
+    - path: src/evaluation/__init__.py
+      hash: md5
+      md5: 07fb4d7c0108f298d686240436a8dbbc
+      size: 73
+    - path: src/evaluation/data.py
+      hash: md5
+      md5: 8c7199416a7b99ab8cd7a29deb0cdec2
+      size: 7921
+    - path: src/evaluation/prepare.py
+      hash: md5
+      md5: f3523a36c15c86da3ed7b17081c00680
+      size: 5508
+    - path: src/pipeline/__init__.py
+      hash: md5
+      md5: 3a79dca6035d5febd1eb5595043ae85e
+      size: 71
+    - path: src/pipeline/run.py
+      hash: md5
+      md5: dc066a03828e5dd637407c64f55ad7d1
+      size: 7140
+    params:
+      params.yaml:
+        evaluation:
+          positive_threshold: 4.0
+          train_end: '2016-03-22T08:26:11Z'
+          validation_end: '2017-06-21T07:17:25Z'
+    outs:
+    - path: artifacts/dvc/evaluation.json
+      hash: md5
+      md5: 44adace9bcc314f9a8228f4856a475f5
+      size: 115
+    - path: reports/dvc/data.json
+      hash: md5
+      md5: 2d52655bd50ac0a6b31bc6d46aa1cacf
+      size: 2783
+  train:
+    cmd: python -m src.pipeline.run train
+    deps:
+    - path: .gitattributes
+      hash: md5
+      md5: 9037a368301a0b260dfc8bb631baa166
+      size: 190
+    - path: artifacts/dvc/evaluation.json
+      hash: md5
+      md5: 44adace9bcc314f9a8228f4856a475f5
+      size: 115
+    - path: data/raw/links.csv
+      hash: md5
+      md5: 316913f95cdad64c745ca22f3630e230
+      size: 197979
+    - path: data/raw/movies.csv
+      hash: md5
+      md5: ed94fab72b62442ef8150d9446e000d6
+      size: 494431
+    - path: data/raw/ratings.csv
+      hash: md5
+      md5: 325a6f09399d1c45671f187505e1a100
+      size: 2483723
+    - path: data/raw/tags.csv
+      hash: md5
+      md5: 1b2d21a7be1cc23d327b11155a4a6aea
+      size: 118660
+    - path: requirements.txt
+      hash: md5
+      md5: 769f6b9f22b3cac867531bf3dd3cf919
+      size: 534
+    - path: src/__init__.py
+      hash: md5
+      md5: 19c9c4aaeffe4e5084f65cb2191d1efa
+      size: 49
+    - path: src/data/__init__.py
+      hash: md5
+      md5: b113d2daf56dec92b97f36ddfd746b95
+      size: 58
+    - path: src/data/exploration.py
+      hash: md5
+      md5: 19329cc38e8d3727dea1e49a385180b6
+      size: 4877
+    - path: src/data/id_mapper.py
+      hash: md5
+      md5: af7721e21eb6e38760d5a4e604798e91
+      size: 4306
+    - path: src/evaluation/__init__.py
+      hash: md5
+      md5: 07fb4d7c0108f298d686240436a8dbbc
+      size: 73
+    - path: src/evaluation/compare.py
+      hash: md5
+      md5: 1cffc2f4bb04fe905e710dfd27ba9b37
+      size: 14142
+    - path: src/evaluation/data.py
+      hash: md5
+      md5: 8c7199416a7b99ab8cd7a29deb0cdec2
+      size: 7921
+    - path: src/evaluation/metrics.py
+      hash: md5
+      md5: ff5b6f48b12bc0e254ffe4882e14599f
+      size: 2981
+    - path: src/evaluation/prepare.py
+      hash: md5
+      md5: f3523a36c15c86da3ed7b17081c00680
+      size: 5508
+    - path: src/models/__init__.py
+      hash: md5
+      md5: 075b109d34859b21f2c52c44ea9d6f32
+      size: 38
+    - path: src/models/collaborative.py
+      hash: md5
+      md5: 977085283e93078312d28062032e0ec1
+      size: 15794
+    - path: src/models/content_based.py
+      hash: md5
+      md5: d06c36a5515c59739de2b49ebeff8263
+      size: 5459
+    - path: src/models/popularity.py
+      hash: md5
+      md5: b015ff0cb43de0c1fcea00f5ef202a8b
+      size: 3527
+    - path: src/models/tmdb_recommender.py
+      hash: md5
+      md5: 5a7190f90c81d1161a87706bd40d418b
+      size: 3102
+    - path: src/pipeline/__init__.py
+      hash: md5
+      md5: 3a79dca6035d5febd1eb5595043ae85e
+      size: 71
+    - path: src/pipeline/run.py
+      hash: md5
+      md5: dc066a03828e5dd637407c64f55ad7d1
+      size: 7140
+    - path: src/training/__init__.py
+      hash: md5
+      md5: b8312780469cdf7db68d7b8df2578a90
+      size: 78
+    - path: src/training/train.py
+      hash: md5
+      md5: 6ffd08472cca5663f5afa4a82099ec14
+      size: 13097
+    params:
+      params.yaml:
+        als:
+          k: 10
+          trials:
+          - name: als_32
+            factors: 32
+            regularization: 0.1
+            alpha: 20.0
+            iterations: 30
+            random_state: 42
+            num_threads: 1
+          - name: als_64
+            factors: 64
+            regularization: 0.1
+            alpha: 20.0
+            iterations: 30
+            random_state: 42
+            num_threads: 1
+          - name: als_32_regularized
+            factors: 32
+            regularization: 1.0
+            alpha: 20.0
+            iterations: 30
+            random_state: 42
+            num_threads: 1
+        tracking.uri: sqlite:///mlruns.db
+    outs:
+    - path: artifacts/dvc/model
+      hash: md5
+      md5: f60d053a9da54d6c497f96f04beba503.dir
+      size: 1865027
+      nfiles: 4
+    - path: reports/dvc/comparison.json
+      hash: md5
+      md5: bba5a73b3bfbccc6534dd491286ecfc3
+      size: 83836
+    - path: reports/dvc/metrics.json
+      hash: md5
+      md5: 66b286072659fe7138e7486f69d29cbc
+      size: 267
