@@ -5,13 +5,12 @@ le modèle ALS fourni par `implicit` pour se concentrer sur le MLOps :
 entraînement reproductible, évaluation, déploiement et suivi en production.
 L'API utilisera des identifiants TMDB.
 
-La [feuille de route](ROADMAP.md) décrit cette direction. Les phases 1 à 6
+La [feuille de route](ROADMAP.md) décrit cette direction. Les phases 1 à 7
 sont réalisées : ALS est entraîné, comparé aux références et rechargeable
 à partir de ses fichiers ou d'une version du registre MLflow. Chaque essai
 conserve les informations sur le code, les données et l'environnement.
-La phase 7 ajoute le suivi des données et du pipeline avec DVC. La
-récupération locale est vérifiée ; l'accès au stockage S3 reste à valider
-pour une autre machine et la CI.
+Les données et les sorties du pipeline sont versionnées avec DVC et leur
+récupération depuis S3 est vérifiée. La suite est l'API FastAPI.
 Le modèle par genres reste disponible pour les comparaisons.
 
 ## Phase 1 : exploration de MovieLens
@@ -623,30 +622,12 @@ descriptions et la [source et licence](data/raw/README.md), tandis que DVC
 conserve les CSV dans son cache et dans le stockage configuré. Les anciennes
 versions des CSV restent présentes dans l'historique Git.
 
-Le stockage actuellement configuré est un dossier local en dehors du dépôt.
-Son adresse est enregistrée dans `.dvc/config.local`, ignoré par Git. Dans
-une nouvelle copie sur ce PC, il faut donc configurer ce stockage avant le
-premier `dvc pull`.
-
-```bat
-dvc remote add --local -d local C:/dev/movies-and-me-recommender-dvc-storage
-dvc pull
-dvc status
-```
-
-Le chemin doit désigner le dossier qui contient déjà les données envoyées
-avec `dvc push`. La commande `pull` récupère les CSV et les sorties du
-pipeline disponibles pour la version Git courante. Elle ne récupère ni le
-code ni les fichiers de configuration : ceux-ci viennent de Git.
-[Documentation DVC](https://doc.dvc.org/command-reference/pull).
-
-Ce dossier local suffit aux essais sur ce PC. Le stockage partagé choisi
-est **Amazon S3**, dans le bucket `movies-and-me`, en région Stockholm
-(`eu-north-1`). Le remote `cloud` désigne
+Le stockage partagé est **Amazon S3**, dans le bucket `movies-and-me`, en
+région Stockholm (`eu-north-1`). Le remote `cloud` désigne
 `s3://movies-and-me/movies-and-me-recommender`. Son adresse et sa région
-sont enregistrées dans `.dvc/config`, suivi par Git. L'authentification et
-le transfert restent à vérifier ; le remote `local` reste celui par défaut
-sur ce PC.
+sont enregistrées dans `.dvc/config`, suivi par Git. C'est le stockage
+par défaut du projet et de ce PC. L'envoi et la récupération depuis S3 ont
+été vérifiés.
 
 Pour l'authentification interactive, installer
 [AWS CLI version 2](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html),
@@ -667,7 +648,8 @@ aws configure set region eu-north-1 --profile movies-and-me
 aws login --profile movies-and-me
 aws sts get-caller-identity --profile movies-and-me
 dvc remote modify --local cloud profile movies-and-me
-dvc push -r cloud
+dvc pull -r cloud
+dvc status
 ```
 
 La connexion se termine dans le navigateur. Le nom du profil est enregistré
@@ -675,10 +657,21 @@ dans `.dvc/config.local` ; les identifiants temporaires et les sessions
 restent dans la configuration AWS, hors du dépôt. Lorsque la session
 expire, relancer `aws login --profile movies-and-me` avant le transfert.
 
-Après le transfert, vérifier un `dvc pull -r cloud` depuis une nouvelle
-copie avec un cache vide, puis recharger le modèle. Après cette validation,
-`dvc remote default --local cloud` permettra de choisir le cloud par défaut
-sur ce PC. Le stockage local restera disponible avec `-r local`.
+La commande `pull` récupère les CSV et les sorties du pipeline pour la
+version Git courante. Le code et les fichiers de configuration viennent
+de Git. [Documentation DVC](https://doc.dvc.org/command-reference/pull).
+
+Le dossier local utilisé pour les premiers essais reste disponible sur ce
+PC. Dans une nouvelle copie sur ce même PC, il peut être ajouté en option :
+
+```bat
+dvc remote add --local local C:/dev/movies-and-me-recommender-dvc-storage
+dvc pull -r local
+```
+
+Son adresse reste dans `.dvc/config.local`, hors de Git. Cette option ne
+change pas le stockage par défaut ; les transferts vers S3 utilisent
+`-r cloud`.
 [DVC avec Amazon S3](https://doc.dvc.org/user-guide/data-management/remote-storage/amazon-s3).
 
 ### Relancer le pipeline
@@ -725,7 +718,7 @@ l'entraînement et ne crée aucun run MLflow. Pour refaire les calculs :
 
 ```bat
 dvc repro --force
-dvc push
+dvc push -r cloud
 git status
 ```
 
@@ -745,13 +738,20 @@ Le pipeline n'enregistre aucune version dans le Model Registry et ne
 déplace pas l'alias `champion`. L'enregistrement reste une commande
 distincte, décrite dans la phase 6.
 
-La vérification locale a récupéré les quatre CSV dans un dossier neuf avec
-un cache vide, avec les mêmes SHA-256. Le pipeline a ensuite été exécuté
-depuis un clone propre. Une seconde exécution sans changement a été sautée ;
+La phase 7 est terminée. Le pipeline a été exécuté depuis un clone propre ;
 une relance forcée a retrouvé les mêmes métriques et un modèle rechargeable,
-sans changer `champion`. Les 216 tests passent. L'authentification AWS,
-le transfert vers S3 et la récupération depuis une autre machine ou la CI
-restent à vérifier.
+sans changer `champion`. Les 216 tests passent.
+
+La récupération S3 a ensuite été vérifiée depuis un nouveau clone sur
+**ce même PC Windows**, avec un cache vide et sans remote local. Les quatre
+CSV ont les mêmes SHA-256 et le fichier de métriques est identique. Le
+modèle récupéré produit dix recommandations. `dvc repro` saute les deux
+étapes déjà à jour, sans créer de run MLflow ni changer les alias. Dans ce
+clone, les états Git et DVC sont propres.
+
+L'exécution sur une autre machine et dans la CI n'a pas encore été testée.
+La connexion AWS de la CI sera traitée en phase 9. La prochaine étape est
+l'intégration de `feat/dvc-pipeline` dans `main`, puis l'API FastAPI.
 
 ## Reproduire l'analyse
 
