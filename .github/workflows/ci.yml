@@ -160,6 +160,24 @@ jobs:
             docker logs movies-me-api || true
             docker rm --force movies-me-api
           fi
+      - name: Check that the package exists and is private
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # GHCR made the package public when GITHUB_TOKEN created it from this
+          # public repository, so only push into the existing private package.
+          token_url="https://ghcr.io/token?scope=repository:samirmaoude/movies-and-me-recommender:pull&service=ghcr.io"
+          tags_url=https://ghcr.io/v2/samirmaoude/movies-and-me-recommender/tags/list
+          anonymous=$(curl -s "$token_url" | jq -r '.token // empty')
+          if [ "$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $anonymous" "$tags_url")" = 200 ]; then
+            echo "::error::The GHCR package is public."
+            exit 1
+          fi
+          token=$(curl -s -u "$GITHUB_ACTOR:$GHCR_TOKEN" "$token_url" | jq -r '.token // empty')
+          if [ "$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $token" "$tags_url")" != 200 ]; then
+            echo "::error::Create the private GHCR package and give this repository write access first."
+            exit 1
+          fi
       - name: Push the checked image
         id: push
         env:
