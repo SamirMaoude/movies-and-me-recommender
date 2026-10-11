@@ -13,6 +13,11 @@ scipy==1.18.1
 threadpoolctl==3.7.0
 # Experiment tracking and local model artifacts.
 mlflow==3.17.0
+# HTTP API, validation, and API test client.
+fastapi==0.143.0
+uvicorn==0.54.0
+pydantic==2.14.0
+httpx2==2.13.1
 # Data versioning and reproducible pipelines.
 dvc[s3]==3.67.1
 # Browser-based AWS login for DVC's S3 client.
