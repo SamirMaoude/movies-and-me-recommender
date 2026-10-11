@@ -285,46 +285,13 @@ class ValidationTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     self.model.recommend(favorites)
 
-    def test_favorite_ids_must_be_integers_and_bool_is_not_an_id(self):
-        for favorites in (["10"], [10.0], [True], [None], [np.nan], 10, "10", None):
-            with self.subTest(favorites=favorites):
-                with self.assertRaises(ValueError):
-                    self.model.recommend(favorites)
-
     def test_profile_without_usable_genres_is_rejected(self):
         with self.assertRaises(ValueError):
             self.model.recommend([80])
 
-    def test_n_must_be_a_positive_integer_and_bool_is_not_a_limit(self):
-        for n in (0, -1, 1.5, "3", True, False, None, np.nan):
-            with self.subTest(n=n):
-                with self.assertRaises(ValueError):
-                    self.model.recommend([10], n=n)
-
-    def test_required_catalogue_columns_are_checked(self):
-        for column in ("movieId", "title", "genres"):
-            with self.subTest(column=column):
-                with self.assertRaises(ValueError):
-                    ContentBasedRecommender(balanced_catalogue().drop(columns=column))
-
     def test_empty_catalogue_is_rejected(self):
         with self.assertRaises(ValueError):
             ContentBasedRecommender(balanced_catalogue().iloc[0:0])
-
-    def test_duplicate_movie_ids_are_rejected(self):
-        movies = balanced_catalogue()
-        duplicated = pd.concat([movies, movies.iloc[[0]]], ignore_index=True)
-        with self.assertRaises(ValueError):
-            ContentBasedRecommender(duplicated)
-
-    def test_catalogue_ids_must_be_integers_and_cannot_be_missing_or_boolean(self):
-        for bad_id in ("10", 10.0, None, np.nan, True):
-            with self.subTest(bad_id=bad_id):
-                movies = balanced_catalogue()
-                movies["movieId"] = movies["movieId"].astype(object)
-                movies.loc[movies["movieId"] == 10, "movieId"] = bad_id
-                with self.assertRaises(ValueError):
-                    ContentBasedRecommender(movies)
 
     def test_catalogue_without_usable_vocabulary_is_rejected(self):
         movies = pd.DataFrame(

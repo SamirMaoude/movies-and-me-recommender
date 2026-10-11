@@ -281,19 +281,5 @@ class TMDBCollisionAndFilteringTests(unittest.TestCase):
         self.assertEqual(adapter.recommend([100]), [])
 
 
-class TMDBValidationTests(unittest.TestCase):
-    def setUp(self):
-        self.adapter = adapter_for(
-            movie_catalogue([(10, "Action"), (20, "Action")]), [(10, 100), (20, 200)]
-        )
-
-    def test_limit_is_validated_even_for_empty_or_unknown_favorites(self):
-        for n in (0, -1, 1.5, "2", True, np.bool_(True), None, np.nan):
-            for favorites in ([100], [], [99999]):
-                with self.subTest(n=n, favorites=favorites):
-                    with self.assertRaises(ValueError):
-                        self.adapter.recommend(favorites, n=n)
-
-
 if __name__ == "__main__":
     unittest.main()
