@@ -34,6 +34,13 @@ CMD ["python", "-m", "uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port
 
 FROM api-base AS deployment
 
+# AWS Lambda serves this image through the web adapter extension, which stays
+# inactive when the image runs anywhere else.
+COPY --from=public.ecr.aws/awsguru/aws-lambda-adapter:1.1.0@sha256:17cfd08eff1dfea3f6a9a1e9c65fdac80aa4919b6085e746615530f43f57d2f1 \
+    /lambda-adapter /opt/extensions/lambda-adapter
+ENV AWS_LWA_PORT=8000 \
+    AWS_LWA_READINESS_CHECK_PATH=/health
+
 USER 0:0
 COPY --from=model --chown=0:0 \
     catalog.json interactions.npz manifest.json model.npz /models/als/
