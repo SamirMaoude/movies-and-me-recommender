@@ -193,7 +193,7 @@ absents. Les tests sont dans [tests/test_id_mapper.py](tests/test_id_mapper.py)
 et [tests/test_tmdb_recommender.py](tests/test_tmdb_recommender.py). Aucun appel
 à l'API TMDB et aucune nouvelle dépendance ne sont nécessaires.
 
-## Phase 4 en cours : préparer l'évaluation
+## Phase 4 : évaluer les modèles
 
 [src/evaluation/data.py](src/evaluation/data.py) prépare les interactions
 et les sépare dans le temps. Une note **supérieure ou égale à 4/5** compte
@@ -241,7 +241,7 @@ bruts et les notebooks ne sont pas modifiés.
 
 ### Limite du découpage
 
-Le catalogue de comparaison prévu comprend les **5 223 films** avec au moins
+Le catalogue de comparaison comprend les **5 223 films** avec au moins
 un avis positif dans l'apprentissage. Dans la validation, **4 595 avis
 positifs sur 5 197 (88,4 %)** concernent ces films ; les **602 autres** sont
 hors de ce catalogue.
@@ -250,15 +250,15 @@ La présence d'un film dans le catalogue ne garantit pas que son utilisateur
 dispose déjà de favoris connus. Seuls **20 des 62 utilisateurs** de validation
 ont à la fois un historique positif dans l'apprentissage et au moins une
 cible positive dans ce catalogue. Cela représente **333 cibles**, soit
-**6,4 %** des avis positifs de validation. La future comparaison sur ce groupe
-sera donc limitée à un petit échantillon. Les autres cas restent présents
+**6,4 %** des avis positifs de validation. La comparaison sur ce groupe
+reste donc limitée à un petit échantillon. Les autres cas restent présents
 dans les tables et comptés dans le rapport.
 
 Les tests de préparation et de couverture sont dans
 [tests/test_evaluation_data.py](tests/test_evaluation_data.py) et
 [tests/test_evaluation_prepare.py](tests/test_evaluation_prepare.py).
-À ce stade, le test final est décrit par ses volumes uniquement ; aucune
-performance de recommandation n'est calculée.
+Le test final est décrit par ses volumes uniquement ; il ne sert pas à
+entraîner, choisir ou évaluer ces deux références.
 
 ### Classement par popularité
 
@@ -307,8 +307,57 @@ Les tests du classement et des cas limites sont dans
 [tests/test_popularity.py](tests/test_popularity.py). Aucune nouvelle dépendance
 n'est nécessaire. Le modèle par genres et son adaptateur TMDB restent disponibles.
 
-La suite de la phase 4 est le calcul de Recall@10 et NDCG@10, puis la comparaison
-sur la validation avec les mêmes favoris simulés, candidats et exclusions.
+### Comparaison sur la validation
+
+Depuis la racine du dépôt :
+
+```powershell
+.\.venv\Scripts\python.exe -m src.evaluation.compare
+```
+
+La commande produit [reports/baseline_comparison.json](reports/baseline_comparison.json).
+Le [compte rendu](reports/baseline_comparison.md) présente les résultats et
+leurs limites. Pour les reproduire, les fichiers bruts et la configuration
+doivent être les mêmes ; leurs empreintes et les versions des bibliothèques
+sont enregistrées dans le rapport JSON.
+
+Les deux modèles reçoivent les mêmes favoris d'apprentissage et peuvent
+recommander les mêmes 5 223 films. Le TF-IDF des genres est ajusté sur les
+métadonnées canoniques de ces films uniquement. Les notes de validation ne
+construisent ni les profils, ni la popularité, ni le vocabulaire des genres.
+Les notes faibles ne retirent aucun candidat. Le modèle par genres garde
+ses règles existantes, sans ajout de popularité pour compléter ses résultats.
+
+Les métriques principales utilisent les cibles de validation présentes dans
+le catalogue. Recall@10 mesure la part retrouvée dans les dix résultats.
+NDCG@10 tient aussi compte de leur position : un film pertinent en tête
+rapporte davantage. Chaque utilisateur a le même poids dans la moyenne,
+quel que soit son nombre de cibles. Un résultat vide compte pour zéro ;
+une cohorte vide donne des métriques `null`.
+
+| Modèle | Recall@10 moyen | NDCG@10 moyen |
+|---|---:|---:|
+| Popularité | 4,57 % | 0,03894 |
+| Genres | 0 % | 0 |
+
+La popularité retrouve cinq cibles chez quatre des vingt utilisateurs.
+Les genres ne retrouvent aucune cible dans leurs dix premiers résultats.
+Ces mesures concernent **20 utilisateurs et 333 cibles dans le catalogue**,
+sur 62 utilisateurs et 5 197 avis positifs de validation. Elles ne permettent
+pas de conclure sur tous les utilisateurs de l'application.
+
+Pour ces mêmes vingt utilisateurs, le rapport calcule aussi les scores en
+comptant leurs **77 cibles hors catalogue** dans les réponses attendues.
+Le Recall@10 de la popularité devient **4,16 %** et son NDCG@10 **0,03481**.
+Les 602 cibles hors catalogue de l'ensemble de la validation restent comptées
+dans la couverture. Aucun utilisateur sans favoris n'entre dans cette
+comparaison ; le comportement de secours reste à évaluer séparément.
+
+Les calculs et le protocole sont vérifiés dans
+[tests/test_evaluation_metrics.py](tests/test_evaluation_metrics.py) et
+[tests/test_evaluation_compare.py](tests/test_evaluation_compare.py).
+La prochaine phase intégrera ALS avec `implicit`, puis utilisera cette
+comparaison comme référence.
 
 ## Reproduire l'analyse
 
