@@ -63,6 +63,10 @@ résumé de l'exécution indique le digest et le `run_id`. Le job `check-publish
 télécharge ensuite l'image par son digest et refait les vérifications.
 Les pull requests ne publient rien.
 
+Avant de pousser, le job `publish` vérifie que le package existe déjà et qu'il
+n'est pas lisible sans authentification. Créé par `GITHUB_TOKEN` depuis ce dépôt
+public, le package est devenu public ; la CI ne le crée donc jamais elle-même.
+
 ### Récupérer l'image
 
 Créer un jeton classique avec le seul scope `read:packages`, puis se connecter
@@ -103,12 +107,41 @@ docker rm --force movies-me-api-ghcr
 docker logout ghcr.io
 ```
 
+### Créer le package privé
+
+Si le package doit être recréé, y pousser une première fois depuis une machine
+l'image construite et vérifiée plus haut, avec un jeton classique limité à
+`write:packages`. Un package créé ainsi est privé :
+
+```bash
+read -rs CR_PAT
+printf '%s' "$CR_PAT" | docker login ghcr.io -u SamirMaoude --password-stdin
+unset CR_PAT
+REVISION=$(git rev-parse HEAD)
+docker tag "movies-me-api:$REVISION" "ghcr.io/samirmaoude/movies-and-me-recommender:$REVISION"
+docker push "ghcr.io/samirmaoude/movies-and-me-recommender:$REVISION"
+docker logout ghcr.io
+```
+
+Dans les paramètres du package, ajouter ensuite le dépôt dans
+**Manage Actions access** avec le rôle **Write**. Une requête anonyme doit
+être refusée :
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' \
+  https://github.com/users/SamirMaoude/packages/container/package/movies-and-me-recommender
+```
+
+La réponse attendue est `404`. Un package public ne peut plus redevenir privé :
+il faut alors le supprimer, puis le recréer de cette manière.
+
 ### Accès utilisés par la publication
 
 - Environnement GitHub `ghcr` : limité à la branche `main`, il contient le
   secret `AWS_ROLE_ARN`.
 - Package GHCR : privé. Seul le job `publish` reçoit `packages: write` ;
-  `check-published` lit l'image avec `packages: read`.
+  `check-published` lit l'image avec `packages: read`. Le dépôt doit avoir le
+  rôle **Write** dans **Manage Actions access**.
 - AWS : un fournisseur OIDC `token.actions.githubusercontent.com` (audience
   `sts.amazonaws.com`) et le rôle `movies-and-me-recommender-dvc-read`.
   Ce rôle autorise seulement `s3:GetObject` sur
