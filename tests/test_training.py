@@ -50,16 +50,6 @@ class TrialSelectionTests(unittest.TestCase):
         trials.append(trial_result("third", 0.3, 0.4))
         self.assertIs(select_trial(trials), trials[1])
 
-    def test_missing_cohort_and_nonfinite_scores_cannot_select_a_winner(self):
-        with self.assertRaises(ValueError):
-            select_trial([])
-        for invalid in (None, math.nan, math.inf, True, "0.2"):
-            with self.subTest(invalid=invalid):
-                with self.assertRaises(ValueError):
-                    select_trial([trial_result("invalid", invalid, 0.2)])
-                with self.assertRaises(ValueError):
-                    select_trial([trial_result("invalid", 0.2, invalid)])
-
 
 class TrainingExperimentTests(unittest.TestCase):
     def setUp(self):

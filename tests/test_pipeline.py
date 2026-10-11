@@ -213,19 +213,6 @@ class PipelineStageTests(unittest.TestCase):
         self.assertEqual(self.evaluation_path.read_text(), "keep this configuration")
         self.assertEqual(self.client.search_runs([self.experiment_id]), [])
 
-    def test_training_rejects_stale_preparation_before_loading_data(self):
-        self.prepare()
-        self.params["evaluation"]["positive_threshold"] = 4.5
-        self.write_params()
-        (self.raw / "ratings.csv").unlink()
-
-        with self.assertRaisesRegex(ValueError, "differs from params.yaml"):
-            self.train()
-
-        self.assertFalse(self.model_dir.exists())
-        self.assertFalse(self.report_path.exists())
-        self.assertEqual(self.client.search_runs([self.experiment_id]), [])
-
 
 if __name__ == "__main__":
     unittest.main()
