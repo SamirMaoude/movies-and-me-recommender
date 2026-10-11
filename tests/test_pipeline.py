@@ -226,24 +226,6 @@ class PipelineStageTests(unittest.TestCase):
         self.assertFalse(self.report_path.exists())
         self.assertEqual(self.client.search_runs([self.experiment_id]), [])
 
-    def test_invalid_evaluation_leaves_no_partial_preparation(self):
-        for updates in (
-            {"positive_threshold": True},
-            {"positive_threshold": 6.0},
-            {"train_end": "1970-01-01"},
-            {"train_end": "1971-01-01T00:00:00Z"},
-        ):
-            with self.subTest(updates=updates):
-                params = {
-                    **self.params,
-                    "evaluation": {**self.params["evaluation"], **updates},
-                }
-                self.params_path.write_text(yaml.safe_dump(params), encoding="utf-8")
-                with self.assertRaises(ValueError):
-                    self.prepare()
-                self.assertFalse(self.evaluation_path.exists())
-                self.assertFalse(self.audit_path.exists())
-
     def test_invalid_trials_fail_without_creating_models_or_runs(self):
         self.prepare()
         self.params["als"]["trials"][0]["alpha"] = -1

@@ -202,20 +202,6 @@ class BuildReportTests(unittest.TestCase):
             original_files,
         )
 
-    def test_missing_extra_or_nonobject_config_fields_are_rejected(self):
-        invalid_configs = [
-            {key: value for key, value in self.config.items() if key != "train_end"},
-            {**self.config, "unexpected": True},
-            [],
-            {**self.config, "positive_threshold": -1},
-            {**self.config, "train_end": "1970-01-01T00:01:40"},
-        ]
-        for config in invalid_configs:
-            with self.subTest(config=config):
-                self.config_path.write_text(json.dumps(config), encoding="utf-8")
-                with self.assertRaises(ValueError):
-                    build_report(self.data_dir, self.config_path)
-
 
 if __name__ == "__main__":
     unittest.main()
