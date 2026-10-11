@@ -19,7 +19,7 @@ RUN python -m pip install --no-cache-dir --only-binary=:all: -r requirements-api
 RUN groupadd --system --gid 10001 app \
     && useradd --system --uid 10001 --gid app --no-create-home app
 
-COPY src/__init__.py ./src/__init__.py
+COPY src/__init__.py src/files.py ./src/
 COPY src/api/ ./src/api/
 COPY src/data/__init__.py src/data/id_mapper.py ./src/data/
 COPY src/models/__init__.py src/models/collaborative.py src/models/registry.py ./src/models/

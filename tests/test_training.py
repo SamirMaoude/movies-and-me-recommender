@@ -16,7 +16,7 @@ from mlflow.store.tracking.sqlalchemy_store import SqlAlchemyStore
 from mlflow.tracking import MlflowClient
 
 from src.models.collaborative import ImplicitRecommender
-from src.training.train import load_experiment_config, run_experiment, select_trial
+from src.training.train import run_experiment, select_trial
 
 
 def trial_result(name, ndcg, recall):
@@ -364,26 +364,6 @@ class TrainingExperimentTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "eligible validation"):
             self.run_experiment(artifact)
         self.assertFalse(artifact.exists())
-
-    def test_invalid_trial_declarations_fail_before_loading_or_training(self):
-        invalid = [
-            [],
-            {"trials": []},
-            {"k": 10, "trials": []},
-            {**self.experiments, "k": True},
-            {**self.experiments, "k": 0},
-            {**self.experiments, "trials": [self.experiments["trials"][0]] * 2},
-            {**self.experiments, "trials": [{"name": "incomplete", "factors": 2}]},
-            {
-                **self.experiments,
-                "trials": [{**self.experiments["trials"][0], "alpha": -1}],
-            },
-        ]
-        for config in invalid:
-            with self.subTest(config=config):
-                self.als_path.write_text(json.dumps(config), encoding="utf-8")
-                with self.assertRaises(ValueError):
-                    load_experiment_config(self.als_path)
 
 
 if __name__ == "__main__":

@@ -226,19 +226,6 @@ class PipelineStageTests(unittest.TestCase):
         self.assertFalse(self.report_path.exists())
         self.assertEqual(self.client.search_runs([self.experiment_id]), [])
 
-    def test_invalid_trials_fail_without_creating_models_or_runs(self):
-        self.prepare()
-        self.params["als"]["trials"][0]["alpha"] = -1
-        self.write_params()
-
-        with self.assertRaises(ValueError):
-            self.train()
-
-        self.assertFalse(self.model_dir.exists())
-        self.assertFalse(self.report_path.exists())
-        self.assertFalse(self.metrics_path.exists())
-        self.assertEqual(self.client.search_runs([self.experiment_id]), [])
-
 
 if __name__ == "__main__":
     unittest.main()

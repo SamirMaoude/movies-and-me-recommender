@@ -276,6 +276,8 @@ def main() -> None:
         command.add_argument("--tracking-uri")
         command.add_argument("--registry-uri")
     args = parser.parse_args()
+    if args.command == "recommend" and args.n < 1:
+        recommend.error("--n must be at least 1")
     try:
         if args.command == "register":
             result = register_model(

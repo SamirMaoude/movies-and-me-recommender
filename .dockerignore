@@ -4,6 +4,7 @@
 !requirements-api.txt
 !src/
 !src/__init__.py
+!src/files.py
 !src/api/
 !src/api/*.py
 !src/data/

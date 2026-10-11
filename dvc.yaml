@@ -39,6 +39,7 @@ stages:
       - src/training/__init__.py
       - src/pipeline/__init__.py
       - src/pipeline/run.py
+      - src/files.py
       - src/data/exploration.py
       - src/data/id_mapper.py
       - src/evaluation/compare.py
