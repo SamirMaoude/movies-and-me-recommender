@@ -200,11 +200,11 @@ dvc pull -r local
 
 ### Correspondances MovieLens et TMDB
 
-[src/data/id_mapper.py](src/data/id_mapper.py) lit `links.csv`. Huit films
-n'ont pas d'ID TMDB et sont écartés des interactions utilisées par le service.
-L'ID TMDB 4912 correspond à deux entrées MovieLens, 6003 et 144606 : le mapping
-choisit le plus petit ID MovieLens, ou le plus petit présent dans le modèle
-pour les recommandations. Les deux entrées sont exclues si cet ID est un favori.
+[src/data/id_mapper.py](src/data/id_mapper.py) relie les IDs MovieLens et TMDB
+à partir de `links.csv`. Les films sans ID TMDB sont ignorés.
+
+Lorsqu'un ID TMDB correspond à plusieurs films MovieLens, le modèle choisit
+une seule entrée. Toutes sont exclues si cet ID figure parmi les favoris.
 
 Les notebooks et le modèle par genres peuvent utiliser des `movieId`
 MovieLens. L'API et `ImplicitRecommender` utilisent directement les IDs TMDB.
