@@ -72,8 +72,8 @@ L'API utilise le même port 8000 que le lancement natif : lancer un seul des deu
 `docker compose logs api` affiche les logs ; `docker compose down` arrête le service.
 Le modèle est monté depuis `artifacts/dvc/model/`.
 
-Pour construire une image avec le modèle inclus, suivre les
-[commandes de déploiement](docs/deployment.md).
+Pour construire une image avec le modèle inclus ou récupérer l'image publiée
+sur GHCR, suivre les [commandes de déploiement](docs/deployment.md).
 
 ## Entraînement
 
@@ -125,7 +125,8 @@ python -m unittest discover -s tests -v
 
 Les tests utilisent des données synthétiques et ne nécessitent pas d'accès AWS.
 La [CI GitHub Actions](.github/workflows/ci.yml) exécute les tests, construit
-l'image Docker et vérifie l'API avec un modèle synthétique.
+l'image Docker et vérifie l'API avec un modèle synthétique. Sur `main`, elle publie
+ensuite sur GHCR l'image vérifiée avec le modèle DVC.
 
 ## Analyses et résultats
 
