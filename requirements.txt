@@ -6,3 +6,8 @@ ipykernel==7.4.0
 nbconvert==7.17.1
 # Sparse TF-IDF features and cosine similarity for the phase 2 baseline.
 scikit-learn==1.9.1
+# CPU ALS and the numerical libraries used for training and inference.
+implicit==0.7.3
+numpy==2.5.3
+scipy==1.18.1
+threadpoolctl==3.7.0

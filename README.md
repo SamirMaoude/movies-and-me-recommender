@@ -1,13 +1,14 @@
 # Movies & Me Recommender
 
-Backend/ML séparé de l'application Movies-And-Me. Le projet s'oriente désormais
-vers le modèle ALS fourni par `implicit` pour se concentrer sur le MLOps :
+Backend/ML séparé de l'application Movies-And-Me. Le projet utilise
+le modèle ALS fourni par `implicit` pour se concentrer sur le MLOps :
 entraînement reproductible, évaluation, déploiement et suivi en production.
 L'API utilisera des identifiants TMDB.
 
-La [feuille de route](ROADMAP.md) décrit cette nouvelle direction. Les phases
-1 à 3 sont réalisées ; la prochaine étape est l'évaluation, avant d'ajouter ALS.
-Le modèle par genres reste disponible comme référence pour les comparaisons.
+La [feuille de route](ROADMAP.md) décrit cette direction. Les phases 1 à 5
+sont réalisées : ALS est entraîné, comparé aux références et rechargeable
+à partir de ses fichiers. La prochaine étape est le suivi des expériences
+avec MLflow. Le modèle par genres reste disponible pour les comparaisons.
 
 ## Phase 1 : exploration de MovieLens
 
@@ -133,7 +134,7 @@ Les scores mesurent une **ressemblance entre genres**, pas une probabilité
 d'apprécier un film ni une note prédite. Les ex æquo sont fréquents ; ils sont
 départagés par `movieId` croissant pour rendre les sorties reproductibles.
 Ce choix privilégie arbitrairement les petits IDs et n'est pas un indicateur
-de qualité. La baseline fonctionne, mais sa qualité prédictive reste à évaluer.
+de qualité. La phase 4 présente l'évaluation de ce classement.
 
 Cette version reste disponible pour les essais avec les IDs MovieLens.
 La version utilisant les IDs de l'application est décrite ci-dessous.
@@ -356,8 +357,113 @@ comparaison ; le comportement de secours reste à évaluer séparément.
 Les calculs et le protocole sont vérifiés dans
 [tests/test_evaluation_metrics.py](tests/test_evaluation_metrics.py) et
 [tests/test_evaluation_compare.py](tests/test_evaluation_compare.py).
-La prochaine phase intégrera ALS avec `implicit`, puis utilisera cette
-comparaison comme référence.
+La phase 5 utilise cette comparaison comme référence pour ALS.
+
+## Phase 5 : ALS avec implicit
+
+[src/models/collaborative.py](src/models/collaborative.py) utilise ALS sur CPU
+avec `implicit==0.7.3`. Le modèle apprend à partir des favoris simulés de
+MovieLens. La matrice contient **521 utilisateurs MovieLens × 5 223 films**
+et **39 251 paires positives**. Chaque paire vaut 1 : une note de 5/5 ne
+pèse pas davantage qu'une note de 4/5. `implicit` applique le coefficient
+`alpha` une seule fois à l'entraînement et une seule fois au calcul du profil
+d'une requête.
+
+### Entraîner et comparer
+
+Depuis la racine du dépôt, avec l'environnement Python 3.12 créé :
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m src.training.train
+```
+
+La commande [src/training/train.py](src/training/train.py) lit les coupures
+de [config/evaluation.json](config/evaluation.json) et les trois essais de
+[config/als.json](config/als.json). Elle entraîne chacun sur l'apprentissage,
+puis compare ALS, popularité et genres avec le protocole de phase 4.
+Le choix donne la priorité au **NDCG@10**, puis au Recall@10 en cas d'égalité ;
+une égalité complète conserve le premier essai déclaré.
+
+| Modèle ou essai | Recall@10 moyen | NDCG@10 moyen |
+|---|---:|---:|
+| Popularité | 4,57 % | 0,03894 |
+| Genres | 0 % | 0 |
+| ALS, 32 facteurs, régularisation 0,1 | 5,69 % | 0,04708 |
+| **ALS, 64 facteurs, régularisation 0,1 — retenu** | **4,81 %** | **0,06231** |
+| ALS, 32 facteurs, régularisation 1 | 5,36 % | 0,04429 |
+
+Les trois essais partagent `alpha=20`, `iterations=30`, `random_state=42`
+et `num_threads=1`. Le modèle à 64 facteurs obtient le meilleur NDCG ; celui
+à 32 facteurs a le meilleur Recall. Le choix ne maximise donc pas les deux
+métriques à la fois. Le modèle retenu retrouve sept cibles chez cinq des
+vingt utilisateurs.
+
+Les mesures principales portent toujours sur **20 utilisateurs et 333 cibles
+connues**. Avec leurs 77 cibles hors catalogue, le Recall d'ALS devient
+**3,82 %**, contre **4,16 %** pour la popularité. Son NDCG reste plus élevé :
+**0,05612**, contre **0,03481**. Le gain dépend donc de la métrique et des
+cibles comptées. Les 333 cibles connues représentent 6,4 % des 5 197 avis positifs
+de validation ; le secours pour les profils sans favori connu n'y est pas mesuré.
+
+Le [compte rendu ALS](reports/als_comparison.md) détaille ces résultats.
+Le [rapport JSON](reports/als_comparison.json) conserve les scores exacts,
+les classements par utilisateur, les configurations, les versions des
+bibliothèques et les empreintes des sources. Le
+[notebook ALS exécuté](notebooks/03_implicit_als.ipynb) montre les essais,
+deux profils de favoris et la sauvegarde/relecture du modèle.
+
+### Charger le modèle et recommander
+
+La commande sauvegarde l'essai ALS retenu dans `artifacts/implicit-als/`.
+Ce dossier contient les facteurs, la matrice d'apprentissage, les IDs, le
+classement de popularité et un manifeste avec configuration, métadonnées
+et empreintes. Le chargement contrôle leur cohérence et ne lit aucun CSV.
+`artifacts/` est ignoré par Git ; une nouvelle copie du dépôt doit entraîner
+le modèle pour obtenir ces fichiers.
+
+```python
+from src.models.collaborative import ImplicitRecommender
+
+recommender = ImplicitRecommender.load("artifacts/implicit-als")
+favorites = [27205, 157336, 155, 603]
+result = recommender.recommend_with_method(favorites, n=10)
+print(result["method"])  # als
+print(result["recommendations"])
+# [{"tmdb_id": 120, "score": ...}, ...]
+
+print(recommender.recommend_with_method([], n=3))
+# method = popularity ; IDs 278, 680, 13.
+```
+
+Chaque appel construit le profil avec les favoris TMDB connus et
+`recalculate_user=True`. Aucun ID utilisateur MovieLens n'est demandé et
+les appels ne modifient pas les facteurs partagés. Les favoris répétés ne
+comptent qu'une fois. Les favoris inconnus sont ignorés ; s'il ne reste
+aucun favori connu, le modèle utilise la popularité de l'apprentissage.
+La méthode employée est indiquée par `method` (`als` ou `popularity`).
+Seuls les favoris transmis sont retirés des résultats. Les scores ALS
+servent au classement et peuvent sortir de l'intervalle [0, 1].
+
+L'adaptateur [TMDBRecommender](src/models/tmdb_recommender.py) reste celui
+du modèle par genres. `ImplicitRecommender` utilise directement les IDs
+TMDB en entrée et en sortie.
+
+Un dossier de modèle existant est conservé : la commande refuse de l'écraser.
+Pour refaire un essai, choisir un nouveau dossier et un rapport distinct :
+
+```powershell
+.\.venv\Scripts\python.exe -m src.training.train --artifact-dir artifacts/implicit-als-run-2 --output reports/als_comparison-run-2.json
+```
+
+Le modèle sauvegardé reste entraîné sur l'apprentissage uniquement pour
+reproduire les scores de validation. Le test final n'a pas été utilisé.
+Le réentraînement sur apprentissage et validation, suivi de la mesure finale
+sur le test, reste à faire une fois les choix figés.
+
+Les tests sont dans [tests/test_collaborative.py](tests/test_collaborative.py)
+et [tests/test_training.py](tests/test_training.py). La suite du projet est
+la **phase 6 : enregistrer les expériences et les modèles dans MLflow**.
 
 ## Reproduire l'analyse
 
@@ -371,6 +477,8 @@ py -3.12 -m venv .venv
 # Exécuter toutes les cellules et sauvegarder leurs résultats dans le notebook.
 .\.venv\Scripts\python.exe -m jupyter nbconvert --to notebook --execute --inplace --ExecutePreprocessor.timeout=120 notebooks\01_exploration.ipynb
 .\.venv\Scripts\python.exe -m jupyter nbconvert --to notebook --execute --inplace --ExecutePreprocessor.timeout=120 notebooks\02_content_based_baseline.ipynb
+# Le rapport et le modèle ALS doivent avoir été produits par src.training.train.
+.\.venv\Scripts\python.exe -m jupyter nbconvert --to notebook --execute --inplace --ExecutePreprocessor.timeout=120 notebooks\03_implicit_als.ipynb
 
 # Tester les calculs, jointures et cas limites indépendamment du dataset réel.
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
@@ -379,6 +487,8 @@ py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe -m jupyter lab notebooks\01_exploration.ipynb
 # Ou ouvrir la baseline de phase 2.
 .\.venv\Scripts\python.exe -m jupyter lab notebooks\02_content_based_baseline.ipynb
+# Ou consulter les essais et les recommandations ALS.
+.\.venv\Scripts\python.exe -m jupyter lab notebooks\03_implicit_als.ipynb
 ```
 
 Sous macOS/Linux, créer l'environnement avec `python3.12 -m venv .venv`,

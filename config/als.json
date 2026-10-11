@@ -1,0 +1,32 @@
+{
+  "k": 10,
+  "trials": [
+    {
+      "name": "als_32",
+      "factors": 32,
+      "regularization": 0.1,
+      "alpha": 20.0,
+      "iterations": 30,
+      "random_state": 42,
+      "num_threads": 1
+    },
+    {
+      "name": "als_64",
+      "factors": 64,
+      "regularization": 0.1,
+      "alpha": 20.0,
+      "iterations": 30,
+      "random_state": 42,
+      "num_threads": 1
+    },
+    {
+      "name": "als_32_regularized",
+      "factors": 32,
+      "regularization": 1.0,
+      "alpha": 20.0,
+      "iterations": 30,
+      "random_state": 42,
+      "num_threads": 1
+    }
+  ]
+}
