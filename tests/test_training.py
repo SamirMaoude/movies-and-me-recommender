@@ -4,23 +4,26 @@ import hashlib
 import json
 import math
 import os
-from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+from pathlib import Path
 
 import mlflow
+import mlflow.tracking.fluent as fluent
 from mlflow.exceptions import MlflowException
 from mlflow.store.tracking.sqlalchemy_store import SqlAlchemyStore
 from mlflow.tracking import MlflowClient
-import mlflow.tracking.fluent as fluent
 
 from src.models.collaborative import ImplicitRecommender
 from src.training.train import load_experiment_config, run_experiment, select_trial
 
 
 def trial_result(name, ndcg, recall):
-    return {"name": name, "evaluation": {"metrics": {"ndcg_at_10": ndcg, "recall_at_10": recall}}}
+    return {
+        "name": name,
+        "evaluation": {"metrics": {"ndcg_at_10": ndcg, "recall_at_10": recall}},
+    }
 
 
 def reproducible_report(report):
@@ -35,7 +38,10 @@ def reproducible_report(report):
 
 class TrialSelectionTests(unittest.TestCase):
     def test_ndcg_is_primary_even_when_another_trial_has_higher_recall(self):
-        trials = [trial_result("higher_recall", 0.2, 0.8), trial_result("higher_ndcg", 0.3, 0.4)]
+        trials = [
+            trial_result("higher_recall", 0.2, 0.8),
+            trial_result("higher_ndcg", 0.3, 0.4),
+        ]
         self.assertIs(select_trial(trials), trials[1])
 
     def test_recall_breaks_ndcg_ties_then_the_first_declared_trial_wins(self):
@@ -87,12 +93,22 @@ class TrainingExperimentTests(unittest.TestCase):
             "k": 10,
             "trials": [
                 {
-                    "name": "small", "factors": 2, "regularization": 0.1,
-                    "alpha": 10.0, "iterations": 3, "random_state": 7, "num_threads": 1,
+                    "name": "small",
+                    "factors": 2,
+                    "regularization": 0.1,
+                    "alpha": 10.0,
+                    "iterations": 3,
+                    "random_state": 7,
+                    "num_threads": 1,
                 },
                 {
-                    "name": "larger", "factors": 3, "regularization": 0.1,
-                    "alpha": 10.0, "iterations": 3, "random_state": 7, "num_threads": 1,
+                    "name": "larger",
+                    "factors": 3,
+                    "regularization": 0.1,
+                    "alpha": 10.0,
+                    "iterations": 3,
+                    "random_state": 7,
+                    "num_threads": 1,
                 },
             ],
         }
@@ -134,9 +150,13 @@ class TrainingExperimentTests(unittest.TestCase):
             engine.dispose()
 
     def run_experiment(self, artifact_dir=None):
-        return run_experiment(self.data_dir, self.evaluation_path, self.als_path, artifact_dir)
+        return run_experiment(
+            self.data_dir, self.evaluation_path, self.als_path, artifact_dir
+        )
 
-    def test_experiment_scores_the_common_cohort_and_saves_a_self_contained_candidate(self):
+    def test_experiment_scores_the_common_cohort_and_saves_a_self_contained_candidate(
+        self,
+    ):
         before = {path: path.read_bytes() for path in self.data_dir.iterdir()}
         artifact = self.directory / "candidate"
 
@@ -162,8 +182,12 @@ class TrainingExperimentTests(unittest.TestCase):
         self.assertEqual(loaded.training_data.movie_ids, (10, 20, 30))
         for row, favorites in zip(report["models"]["als"]["per_user"], ([100], [200])):
             predicted = loaded.recommend(favorites)
-            self.assertEqual([item["tmdb_id"] for item in predicted], row["recommended_tmdb_ids"])
-        self.assertEqual({path: path.read_bytes() for path in self.data_dir.iterdir()}, before)
+            self.assertEqual(
+                [item["tmdb_id"] for item in predicted], row["recommended_tmdb_ids"]
+            )
+        self.assertEqual(
+            {path: path.read_bytes() for path in self.data_dir.iterdir()}, before
+        )
 
     def test_repeating_the_same_experiment_reproduces_scores_and_selection(self):
         first = self.run_experiment()
@@ -175,7 +199,9 @@ class TrainingExperimentTests(unittest.TestCase):
             )
         )
 
-    def test_future_test_ratings_cannot_change_candidates_profiles_scores_or_selection(self):
+    def test_future_test_ratings_cannot_change_candidates_profiles_scores_or_selection(
+        self,
+    ):
         first = self.run_experiment()
         ratings = self.data_dir / "ratings.csv"
         with ratings.open("a", encoding="utf-8") as stream:
@@ -187,7 +213,9 @@ class TrainingExperimentTests(unittest.TestCase):
         stable_second = reproducible_report(second)
         for field in ("models", "trials", "selection", "coverage", "training_matrix"):
             self.assertEqual(stable_second[field], stable_first[field], field)
-        self.assertNotEqual(second["sources"]["ratings.csv"], first["sources"]["ratings.csv"])
+        self.assertNotEqual(
+            second["sources"]["ratings.csv"], first["sources"]["ratings.csv"]
+        )
 
     def test_mlflow_runs_link_provenance_models_scores_and_the_selected_report(self):
         candidate = self.directory / "candidate"
@@ -203,7 +231,9 @@ class TrainingExperimentTests(unittest.TestCase):
             {trial["run_id"] for trial in report["trials"]},
         )
         expected_commit = subprocess.check_output(
-            ["git", "rev-parse", "HEAD"], cwd=Path(__file__).resolve().parents[1], text=True
+            ["git", "rev-parse", "HEAD"],
+            cwd=Path(__file__).resolve().parents[1],
+            text=True,
         ).strip()
         self.assertEqual(report["git"]["commit"], expected_commit)
         self.assertIsInstance(report["git"]["dirty"], bool)
@@ -214,9 +244,7 @@ class TrainingExperimentTests(unittest.TestCase):
                 hashlib.sha256((self.data_dir / name).read_bytes()).hexdigest(),
             )
 
-        provenance = {
-            name: report[name] for name in ("git", "sources", "environment")
-        }
+        provenance = {name: report[name] for name in ("git", "sources", "environment")}
         local_model = ImplicitRecommender.load(candidate)
         self.assertEqual(local_model.metadata["run_id"], selected_run_id)
         for name, value in provenance.items():
@@ -255,9 +283,9 @@ class TrainingExperimentTests(unittest.TestCase):
                 )
                 destination = self.directory / f"download-{run_id}"
                 destination.mkdir()
-                download = lambda path: Path(self.client.download_artifacts(
-                    run_id, path, str(destination)
-                ))
+                download = lambda path: Path(  # noqa: E731
+                    self.client.download_artifacts(run_id, path, str(destination))  # noqa: B023
+                )
                 stored_provenance = json.loads(download("provenance.json").read_text())
                 for name, value in provenance.items():
                     self.assertEqual(stored_provenance[name], value)
@@ -274,9 +302,12 @@ class TrainingExperimentTests(unittest.TestCase):
                 self.assertEqual(recovered.metadata["run_id"], run_id)
                 self.assertEqual(recovered.metadata["trial"], trial["name"])
                 self.assertEqual(recovered.metadata["fit_split"], "train")
-                self.assertEqual(recovered.metadata["evaluation_config"], self.evaluation)
                 self.assertEqual(
-                    recovered.metadata["validation_metrics"], trial["evaluation"]["metrics"]
+                    recovered.metadata["evaluation_config"], self.evaluation
+                )
+                self.assertEqual(
+                    recovered.metadata["validation_metrics"],
+                    trial["evaluation"]["metrics"],
                 )
                 for name, value in provenance.items():
                     self.assertEqual(recovered.metadata[name], value)
@@ -299,10 +330,14 @@ class TrainingExperimentTests(unittest.TestCase):
                             [item["tmdb_id"] for item in local],
                         )
                         for actual, expected in zip(restored, local):
-                            self.assertAlmostEqual(actual["score"], expected["score"], places=6)
+                            self.assertAlmostEqual(
+                                actual["score"], expected["score"], places=6
+                            )
 
     def test_artifact_logging_failure_marks_the_run_failed_and_saves_no_candidate(self):
-        self.artifact_root.write_text("This file prevents creating artifact directories.")
+        self.artifact_root.write_text(
+            "This file prevents creating artifact directories."
+        )
         candidate = self.directory / "candidate"
         with self.assertRaises((OSError, MlflowException)):
             self.run_experiment(candidate)
@@ -332,12 +367,17 @@ class TrainingExperimentTests(unittest.TestCase):
 
     def test_invalid_trial_declarations_fail_before_loading_or_training(self):
         invalid = [
-            [], {"trials": []}, {"k": 10, "trials": []},
+            [],
+            {"trials": []},
+            {"k": 10, "trials": []},
             {**self.experiments, "k": True},
             {**self.experiments, "k": 0},
             {**self.experiments, "trials": [self.experiments["trials"][0]] * 2},
             {**self.experiments, "trials": [{"name": "incomplete", "factors": 2}]},
-            {**self.experiments, "trials": [{**self.experiments["trials"][0], "alpha": -1}]},
+            {
+                **self.experiments,
+                "trials": [{**self.experiments["trials"][0], "alpha": -1}],
+            },
         ]
         for config in invalid:
             with self.subTest(config=config):

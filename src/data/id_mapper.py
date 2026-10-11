@@ -67,7 +67,10 @@ class IdMapper:
 
         self._movie_to_tmdb = MappingProxyType(movie_to_tmdb)
         self._tmdb_to_movies = MappingProxyType(
-            {tmdb_id: tuple(sorted(movie_ids)) for tmdb_id, movie_ids in tmdb_to_movies.items()}
+            {
+                tmdb_id: tuple(sorted(movie_ids))
+                for tmdb_id, movie_ids in tmdb_to_movies.items()
+            }
         )
 
     def to_tmdb_id(self, movie_id: int) -> int | None:

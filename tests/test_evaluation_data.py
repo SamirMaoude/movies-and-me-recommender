@@ -7,9 +7,13 @@ import pandas as pd
 
 from src.evaluation.data import prepare_interactions, temporal_split
 
-
 INTERACTION_COLUMNS = [
-    "userId", "movieId", "tmdbId", "rating", "timestamp", "is_positive"
+    "userId",
+    "movieId",
+    "tmdbId",
+    "rating",
+    "timestamp",
+    "is_positive",
 ]
 
 
@@ -133,7 +137,9 @@ class PrepareInteractionsTests(unittest.TestCase):
         self.assertEqual(interactions["is_positive"].tolist(), [False])
 
     def test_reordering_ratings_and_links_cannot_change_the_result(self):
-        expected, expected_counts = prepare_interactions(sample_ratings(), sample_links())
+        expected, expected_counts = prepare_interactions(
+            sample_ratings(), sample_links()
+        )
         actual, counts = prepare_interactions(
             sample_ratings().sample(frac=1, random_state=19),
             sample_links().sample(frac=1, random_state=23),
@@ -172,7 +178,10 @@ class PrepareInteractionsTests(unittest.TestCase):
 
     def test_does_not_mutate_ratings_or_links(self):
         ratings, links = sample_ratings(), sample_links()
-        original_ratings, original_links = ratings.copy(deep=True), links.copy(deep=True)
+        original_ratings, original_links = (
+            ratings.copy(deep=True),
+            links.copy(deep=True),
+        )
 
         prepare_interactions(ratings, links)
 
@@ -199,7 +208,9 @@ class PrepareInteractionsTests(unittest.TestCase):
         for column in ("userId", "movieId", "rating", "timestamp"):
             with self.subTest(missing_column=column):
                 with self.assertRaises(ValueError):
-                    prepare_interactions(sample_ratings().drop(columns=column), sample_links())
+                    prepare_interactions(
+                        sample_ratings().drop(columns=column), sample_links()
+                    )
         for threshold in (None, np.nan, np.inf, -1.0, 5.5, True, "4.0"):
             with self.subTest(threshold=threshold):
                 with self.assertRaises(ValueError):
@@ -250,9 +261,14 @@ class PrepareInteractionsTests(unittest.TestCase):
                 self.assertEqual(counts["input_ratings"], len(ratings))
                 self.assertEqual(counts["ratings_without_tmdb"], len(ratings))
                 for key in (
-                    "ratings_with_tmdb", "remapped_ratings", "duplicate_user_movies_removed",
-                    "prepared_interactions", "positive_interactions", "other_interactions",
-                    "users", "movies",
+                    "ratings_with_tmdb",
+                    "remapped_ratings",
+                    "duplicate_user_movies_removed",
+                    "prepared_interactions",
+                    "positive_interactions",
+                    "other_interactions",
+                    "users",
+                    "movies",
                 ):
                     self.assertEqual(counts[key], 0, key)
 
@@ -266,7 +282,9 @@ class TemporalSplitTests(unittest.TestCase):
         self.assertEqual(set(parts["validation"]["userId"]), {2, 5, 6})
         self.assertEqual(set(parts["test"]["userId"]), {1, 4})
         for name, expected_timestamps in (
-            ("train", {0, 99}), ("validation", {100, 199}), ("test", {200})
+            ("train", {0, 99}),
+            ("validation", {100, 199}),
+            ("test", {200}),
         ):
             self.assertEqual(set(parts[name]["timestamp"]), expected_timestamps)
         self.assertEqual(sum(map(len, parts.values())), len(split_fixture()))
@@ -289,13 +307,21 @@ class TemporalSplitTests(unittest.TestCase):
             with self.subTest(train_end=train_end, validation_end=validation_end):
                 with self.assertRaises(ValueError):
                     temporal_split(
-                        split_fixture(), utc_timestamp(train_end), utc_timestamp(validation_end)
+                        split_fixture(),
+                        utc_timestamp(train_end),
+                        utc_timestamp(validation_end),
                     )
 
     def test_cutoffs_require_explicit_timezones_and_valid_dates(self):
         invalid_bounds = [
-            "1970-01-01T00:01:40", pd.Timestamp("1970-01-01"),
-            pd.Timestamp("1970-01-01").date(), "not a date", None, pd.NaT, 100, True,
+            "1970-01-01T00:01:40",
+            pd.Timestamp("1970-01-01"),
+            pd.Timestamp("1970-01-01").date(),
+            "not a date",
+            None,
+            pd.NaT,
+            100,
+            True,
         ]
         for bound in invalid_bounds:
             for position in ("train_end", "validation_end"):
@@ -319,7 +345,9 @@ class TemporalSplitTests(unittest.TestCase):
     def test_empty_groups_and_empty_inputs_are_allowed(self):
         for interactions in (split_fixture().iloc[[6]], split_fixture().iloc[:0]):
             with self.subTest(input_rows=len(interactions)):
-                parts = temporal_split(interactions, utc_timestamp(100), utc_timestamp(200))
+                parts = temporal_split(
+                    interactions, utc_timestamp(100), utc_timestamp(200)
+                )
                 self.assertEqual(len(parts["train"]), len(interactions))
                 self.assertTrue(parts["validation"].empty)
                 self.assertTrue(parts["test"].empty)

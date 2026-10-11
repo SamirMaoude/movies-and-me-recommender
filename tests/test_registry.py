@@ -1,22 +1,24 @@
 """Real SQLite registry versions, native ALS reloads and safe alias updates."""
 
-from dataclasses import FrozenInstanceError
 import json
-from pathlib import Path
 import subprocess
 import sys
 import tempfile
 import unittest
+from dataclasses import FrozenInstanceError
+from pathlib import Path
 from urllib.parse import urlsplit
 from urllib.request import url2pathname
 
 import mlflow
-from mlflow.exceptions import MlflowException
-from mlflow.store.model_registry.sqlalchemy_store import SqlAlchemyStore as RegistryStore
-from mlflow.store.tracking.sqlalchemy_store import SqlAlchemyStore as TrackingStore
-from mlflow.tracking import MlflowClient
 import numpy as np
 import pandas as pd
+from mlflow.exceptions import MlflowException
+from mlflow.store.model_registry.sqlalchemy_store import (
+    SqlAlchemyStore as RegistryStore,
+)
+from mlflow.store.tracking.sqlalchemy_store import SqlAlchemyStore as TrackingStore
+from mlflow.tracking import MlflowClient
 
 from src.models.collaborative import ALSConfig, ImplicitRecommender
 from src.models.registry import load_recommender, register_model
@@ -25,18 +27,27 @@ from src.models.registry import load_recommender, register_model
 class ModelRegistryTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        links = pd.DataFrame({
-            "movieId": [10, 20, 30, 40, 50],
-            "tmdbId": [100, 200, 300, 400, 500],
-        })
-        train = pd.DataFrame([
-            (1, 10, 100, True), (1, 20, 200, True),
-            (2, 10, 100, True), (2, 30, 300, True),
-            (3, 40, 400, True), (3, 50, 500, True),
-        ], columns=["userId", "movieId", "tmdbId", "is_positive"])
+        links = pd.DataFrame(
+            {
+                "movieId": [10, 20, 30, 40, 50],
+                "tmdbId": [100, 200, 300, 400, 500],
+            }
+        )
+        train = pd.DataFrame(
+            [
+                (1, 10, 100, True),
+                (1, 20, 200, True),
+                (2, 10, 100, True),
+                (2, 30, 300, True),
+                (3, 40, 400, True),
+                (3, 50, 500, True),
+            ],
+            columns=["userId", "movieId", "tmdbId", "is_positive"],
+        )
         cls.models = [
             ImplicitRecommender.fit(
-                train, links,
+                train,
+                links,
                 ALSConfig(factors=3, iterations=3, random_state=seed),
             )
             for seed in (42, 7)
@@ -77,7 +88,8 @@ class ModelRegistryTests(unittest.TestCase):
         self.models[index].save(
             bundle,
             metadata={"run_id": run_id, "trial": f"trial-{index}"}
-            if metadata is None else metadata,
+            if metadata is None
+            else metadata,
         )
         self.client.log_artifacts(run_id, str(bundle), artifact_path="model")
         if status != "RUNNING":
@@ -86,8 +98,11 @@ class ModelRegistryTests(unittest.TestCase):
 
     def register(self, run_id, alias=None):
         return register_model(
-            run_id, self.name, alias=alias,
-            tracking_uri=self.tracking_uri, registry_uri=self.registry_uri,
+            run_id,
+            self.name,
+            alias=alias,
+            tracking_uri=self.tracking_uri,
+            registry_uri=self.registry_uri,
         )
 
     def load(self, source):
@@ -108,7 +123,8 @@ class ModelRegistryTests(unittest.TestCase):
                 np.testing.assert_allclose(
                     [row["score"] for row in actual["recommendations"]],
                     [row["score"] for row in expected["recommendations"]],
-                    rtol=1e-6, atol=1e-7,
+                    rtol=1e-6,
+                    atol=1e-7,
                 )
                 self.assertEqual(
                     loaded.recommend(favorites, n=3), actual["recommendations"]
@@ -153,12 +169,15 @@ class ModelRegistryTests(unittest.TestCase):
         with self.assertRaises(MlflowException):
             self.champion()
         loaded = self.load(registered["model_uri"])
-        self.assertEqual((loaded.name, loaded.version, loaded.run_id),
-                         (self.name, "1", run_id))
+        self.assertEqual(
+            (loaded.name, loaded.version, loaded.run_id), (self.name, "1", run_id)
+        )
         self.assertEqual(loaded.model_uri, registered["model_uri"])
         self.assert_recommendations(loaded, self.models[0])
 
-    def test_explicit_champion_changes_leave_old_versions_and_loaded_aliases_stable(self):
+    def test_explicit_champion_changes_leave_old_versions_and_loaded_aliases_stable(
+        self,
+    ):
         first_run, _ = self.log_model(0)
         first = self.register(first_run, alias="champion")
         self.assertEqual(first["alias"], "champion")
@@ -172,7 +191,9 @@ class ModelRegistryTests(unittest.TestCase):
         promoted = self.register(second_run, alias="champion")
         self.assertEqual(promoted["version"], "2")
         self.assertEqual(str(self.champion().version), "2")
-        self.assertEqual(len(self.client.search_model_versions(f"name = '{self.name}'")), 2)
+        self.assertEqual(
+            len(self.client.search_model_versions(f"name = '{self.name}'")), 2
+        )
 
         current = self.load(f"models:/{self.name}@champion")
         self.assertEqual(current.model_uri, second["model_uri"])
@@ -191,7 +212,9 @@ class ModelRegistryTests(unittest.TestCase):
                 with self.assertRaises((ValueError, MlflowException)):
                     self.register(run_id, alias="champion")
                 self.assertEqual(self.champion().run_id, good_run)
-        self.assertEqual(len(self.client.search_model_versions(f"name = '{self.name}'")), 1)
+        self.assertEqual(
+            len(self.client.search_model_versions(f"name = '{self.name}'")), 1
+        )
 
     def test_corrupt_candidate_is_rejected_before_registration_and_alias_change(self):
         good_run, _ = self.log_model()
@@ -204,7 +227,9 @@ class ModelRegistryTests(unittest.TestCase):
             self.register(broken_run, alias="champion")
 
         self.assertEqual(self.champion().run_id, good_run)
-        self.assertEqual(len(self.client.search_model_versions(f"name = '{self.name}'")), 1)
+        self.assertEqual(
+            len(self.client.search_model_versions(f"name = '{self.name}'")), 1
+        )
 
     def test_idempotent_reuse_rechecks_integrity_before_champion_assignment(self):
         good_run, _ = self.log_model()
@@ -220,7 +245,9 @@ class ModelRegistryTests(unittest.TestCase):
             self.load(other["model_uri"])
 
         self.assertEqual(self.champion().run_id, good_run)
-        self.assertEqual(len(self.client.search_model_versions(f"name = '{self.name}'")), 2)
+        self.assertEqual(
+            len(self.client.search_model_versions(f"name = '{self.name}'")), 2
+        )
 
     def test_manifest_must_name_the_run_that_owns_the_bundle(self):
         good_run, _ = self.log_model()
@@ -231,7 +258,9 @@ class ModelRegistryTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     self.register(run_id, alias="champion")
                 self.assertEqual(self.champion().run_id, good_run)
-        self.assertEqual(len(self.client.search_model_versions(f"name = '{self.name}'")), 1)
+        self.assertEqual(
+            len(self.client.search_model_versions(f"name = '{self.name}'")), 1
+        )
 
     def test_missing_bundle_cannot_create_a_registry_version(self):
         run = self.client.create_run(self.experiment_id)
@@ -244,8 +273,10 @@ class ModelRegistryTests(unittest.TestCase):
         run_id, _ = self.log_model()
         self.register(run_id)
         for source in (
-            "models:/missing/1", f"models:/{self.name}/999",
-            f"models:/{self.name}@champion", "runs:/00000000000000000000000000000000/model",
+            "models:/missing/1",
+            f"models:/{self.name}/999",
+            f"models:/{self.name}@champion",
+            "runs:/00000000000000000000000000000000/model",
         ):
             with self.subTest(source=source):
                 with self.assertRaises((ValueError, MlflowException)):
@@ -253,16 +284,30 @@ class ModelRegistryTests(unittest.TestCase):
 
     def test_invalid_source_forms_and_versions_are_rejected(self):
         for source in (
-            None, True, 12, "", "models:/", "models:/name", "models:/name/0",
-            "models:/name/-1", "models:/name/1.5", "models:/name/latest",
-            "models:/name@", "models:/name/1/extra", "runs:/", "runs:/id",
-            "https://example.com/model", "s3://bucket/model",
+            None,
+            True,
+            12,
+            "",
+            "models:/",
+            "models:/name",
+            "models:/name/0",
+            "models:/name/-1",
+            "models:/name/1.5",
+            "models:/name/latest",
+            "models:/name@",
+            "models:/name/1/extra",
+            "runs:/",
+            "runs:/id",
+            "https://example.com/model",
+            "s3://bucket/model",
         ):
             with self.subTest(source=source):
                 with self.assertRaises((ValueError, MlflowException)):
                     self.load(source)
 
-    def test_tracking_and_registry_can_use_separate_databases_without_global_changes(self):
+    def test_tracking_and_registry_can_use_separate_databases_without_global_changes(
+        self,
+    ):
         self.registry_uri = f"sqlite:///{(self.directory / 'registry.db').as_posix()}"
         self.client = MlflowClient(
             tracking_uri=self.tracking_uri, registry_uri=self.registry_uri
@@ -285,8 +330,10 @@ class ModelRegistryTests(unittest.TestCase):
     def test_cli_registers_a_version_and_recommends_from_an_alias_as_json(self):
         run_id, _ = self.log_model()
         common = [
-            "--tracking-uri", self.tracking_uri,
-            "--registry-uri", self.registry_uri,
+            "--tracking-uri",
+            self.tracking_uri,
+            "--registry-uri",
+            self.registry_uri,
         ]
         command = [sys.executable, "-m", "src.models.registry"]
         options = {
@@ -301,14 +348,30 @@ class ModelRegistryTests(unittest.TestCase):
         )
         self.assertEqual(registered_process.returncode, 0, registered_process.stderr)
         registered = json.loads(registered_process.stdout)
-        self.assertEqual(registered, {
-            "name": self.name, "version": "1", "run_id": run_id,
-            "model_uri": f"models:/{self.name}/1", "alias": "champion",
-        })
+        self.assertEqual(
+            registered,
+            {
+                "name": self.name,
+                "version": "1",
+                "run_id": run_id,
+                "model_uri": f"models:/{self.name}/1",
+                "alias": "champion",
+            },
+        )
 
         recommendations_process = subprocess.run(
-            [*command, "recommend", "--model-uri", f"models:/{self.name}@champion",
-             "--favorites", "100", "300", "--n", "2", *common],
+            [
+                *command,
+                "recommend",
+                "--model-uri",
+                f"models:/{self.name}@champion",
+                "--favorites",
+                "100",
+                "300",
+                "--n",
+                "2",
+                *common,
+            ],
             **options,
         )
         self.assertEqual(
@@ -326,12 +389,20 @@ class ModelRegistryTests(unittest.TestCase):
         np.testing.assert_allclose(
             [row["score"] for row in recommendations["recommendations"]],
             [row["score"] for row in expected["recommendations"]],
-            rtol=1e-6, atol=1e-7,
+            rtol=1e-6,
+            atol=1e-7,
         )
 
         invalid_process = subprocess.run(
-            [*command, "recommend", "--model-uri", registered["model_uri"],
-             "--n", "0", *common],
+            [
+                *command,
+                "recommend",
+                "--model-uri",
+                registered["model_uri"],
+                "--n",
+                "0",
+                *common,
+            ],
             **options,
         )
         self.assertNotEqual(invalid_process.returncode, 0)

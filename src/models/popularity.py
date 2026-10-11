@@ -8,7 +8,11 @@ import pandas as pd
 
 
 def _positive_integer(value: object, name: str) -> int:
-    if isinstance(value, (bool, np.bool_)) or not isinstance(value, Integral) or value <= 0:
+    if (
+        isinstance(value, (bool, np.bool_))
+        or not isinstance(value, Integral)
+        or value <= 0
+    ):
         raise ValueError(f"{name} must contain positive integers.")
     return int(value)
 
@@ -30,27 +34,37 @@ class PopularityRecommender:
         if not isinstance(train_interactions, pd.DataFrame) or any(
             list(train_interactions.columns).count(column) != 1 for column in required
         ):
-            raise ValueError("Training data must contain userId, tmdbId and is_positive columns.")
+            raise ValueError(
+                "Training data must contain userId, tmdbId and is_positive columns."
+            )
         frame = train_interactions.loc[:, required].copy(deep=True)
         for column in ("userId", "tmdbId"):
             for value in frame[column]:
                 _positive_integer(value, column)
-        if any(not isinstance(value, (bool, np.bool_)) for value in frame["is_positive"]):
-            raise ValueError("is_positive must contain booleans without missing values.")
+        if any(
+            not isinstance(value, (bool, np.bool_)) for value in frame["is_positive"]
+        ):
+            raise ValueError(
+                "is_positive must contain booleans without missing values."
+            )
 
         positive = frame.loc[frame["is_positive"].astype(bool), ["userId", "tmdbId"]]
         ranking = (
             positive.drop_duplicates(["userId", "tmdbId"])
-            .groupby("tmdbId").size().rename("score").reset_index()
+            .groupby("tmdbId")
+            .size()
+            .rename("score")
+            .reset_index()
             .sort_values(["score", "tmdbId"], ascending=[False, True])
         )
         self._ranking = tuple(
-            (int(row.tmdbId), int(row.score))
-            for row in ranking.itertuples(index=False)
+            (int(row.tmdbId), int(row.score)) for row in ranking.itertuples(index=False)
         )
 
     def recommend(
-        self, favorite_tmdb_ids: Iterable[int], n: int = 10,
+        self,
+        favorite_tmdb_ids: Iterable[int],
+        n: int = 10,
     ) -> list[dict[str, int | float]]:
         """Return up to n ranked movies, excluding only the supplied favorites.
 
@@ -61,12 +75,18 @@ class PopularityRecommender:
         """
         limit = _positive_integer(n, "n")
         if isinstance(favorite_tmdb_ids, (str, bytes)):
-            raise ValueError("favorite_tmdb_ids must be an iterable of positive integers.")
+            raise ValueError(
+                "favorite_tmdb_ids must be an iterable of positive integers."
+            )
         try:
             favorites = list(favorite_tmdb_ids)
         except TypeError as exc:
-            raise ValueError("favorite_tmdb_ids must be an iterable of positive integers.") from exc
-        excluded = {_positive_integer(value, "favorite_tmdb_ids") for value in favorites}
+            raise ValueError(
+                "favorite_tmdb_ids must be an iterable of positive integers."
+            ) from exc
+        excluded = {
+            _positive_integer(value, "favorite_tmdb_ids") for value in favorites
+        }
         recommendations = []
         for tmdb_id, positive_users in self._ranking:
             if tmdb_id in excluded:

@@ -8,7 +8,11 @@ import numpy as np
 
 
 def _positive_integer(value: object, name: str) -> int:
-    if isinstance(value, (bool, np.bool_)) or not isinstance(value, Integral) or value <= 0:
+    if (
+        isinstance(value, (bool, np.bool_))
+        or not isinstance(value, Integral)
+        or value <= 0
+    ):
         raise ValueError(f"{name} must contain positive integers.")
     return int(value)
 
@@ -19,12 +23,16 @@ def _item_ids(values: Iterable[int], name: str) -> list[int]:
     try:
         items = list(values)
     except TypeError as exc:
-        raise ValueError(f"{name} must be an iterable of positive integer IDs.") from exc
+        raise ValueError(
+            f"{name} must be an iterable of positive integer IDs."
+        ) from exc
     return [_positive_integer(value, name) for value in items]
 
 
 def _validated_inputs(
-    recommendations: Iterable[int], relevant_items: Iterable[int], k: int,
+    recommendations: Iterable[int],
+    relevant_items: Iterable[int],
+    k: int,
 ) -> tuple[list[int], set[int], int]:
     limit = _positive_integer(k, "k")
     if isinstance(recommendations, Set):
@@ -37,7 +45,9 @@ def _validated_inputs(
 
 
 def recall_at_k(
-    recommendations: Iterable[int], relevant_items: Iterable[int], k: int = 10,
+    recommendations: Iterable[int],
+    relevant_items: Iterable[int],
+    k: int = 10,
 ) -> float | None:
     """Return the fraction of distinct relevant movies found in the first k.
 
@@ -53,7 +63,9 @@ def recall_at_k(
 
 
 def ndcg_at_k(
-    recommendations: Iterable[int], relevant_items: Iterable[int], k: int = 10,
+    recommendations: Iterable[int],
+    relevant_items: Iterable[int],
+    k: int = 10,
 ) -> float | None:
     """Return binary discounted gain divided by the ideal gain at k.
 
@@ -70,5 +82,7 @@ def ndcg_at_k(
         for rank, item in enumerate(ranking, start=1)
         if item in relevant
     )
-    ideal_gain = sum(1.0 / log2(rank + 1) for rank in range(1, min(limit, len(relevant)) + 1))
+    ideal_gain = sum(
+        1.0 / log2(rank + 1) for rank in range(1, min(limit, len(relevant)) + 1)
+    )
     return float(gain / ideal_gain)

@@ -4,7 +4,6 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-
 MAX_FAVORITES = 500
 MAX_RECOMMENDATIONS = 50
 PositiveId = Annotated[int, Field(strict=True, gt=0)]

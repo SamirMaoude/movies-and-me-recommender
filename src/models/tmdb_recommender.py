@@ -23,7 +23,9 @@ class TMDBRecommender:
         self._catalog_ids = set(recommender.movies["movieId"])
 
     def recommend(
-        self, favorite_tmdb_ids: Iterable[int], n: int = 10,
+        self,
+        favorite_tmdb_ids: Iterable[int],
+        n: int = 10,
     ) -> list[dict[str, int | float]]:
         """Return up to n unique TMDB IDs with positive similarity scores.
 
@@ -37,7 +39,9 @@ class TMDBRecommender:
         try:
             favorites = list(favorite_tmdb_ids)
         except TypeError as exc:
-            raise ValueError("favorite_tmdb_ids must be an iterable of positive integers.") from exc
+            raise ValueError(
+                "favorite_tmdb_ids must be an iterable of positive integers."
+            ) from exc
 
         favorite_aliases = {}
         for tmdb_id in favorites:
@@ -61,7 +65,8 @@ class TMDBRecommender:
 
         # Get the whole ranking so unmapped movies do not consume the limit.
         ranked = self.recommender.recommend(
-            sorted(favorite_movie_ids), n=len(self.recommender.movies),
+            sorted(favorite_movie_ids),
+            n=len(self.recommender.movies),
         )
         seen_tmdb_ids = set(favorite_aliases)
         recommendations = []

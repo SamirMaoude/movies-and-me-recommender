@@ -15,7 +15,6 @@ from mlflow.tracking import MlflowClient
 
 from src.models.collaborative import ImplicitRecommender
 
-
 DEFAULT_MODEL_NAME = "movies-and-me-als"
 
 
@@ -43,7 +42,9 @@ def _check_run_id(run_id: str) -> None:
 
 def _check_name(name: str) -> None:
     if (
-        not isinstance(name, str) or not name.strip() or name != name.strip()
+        not isinstance(name, str)
+        or not name.strip()
+        or name != name.strip()
         or any(character in name for character in "/@?#")
     ):
         raise ValueError("Model name must be nonempty and contain no /, @, ? or #.")
@@ -51,24 +52,32 @@ def _check_name(name: str) -> None:
 
 def _check_alias(alias: str | None) -> None:
     if alias is not None and (
-        not isinstance(alias, str) or not re.fullmatch(r"[A-Za-z0-9_-]+", alias)
-        or alias.lower() == "latest" or re.fullmatch(r"[vV]\d+", alias)
+        not isinstance(alias, str)
+        or not re.fullmatch(r"[A-Za-z0-9_-]+", alias)
+        or alias.lower() == "latest"
+        or re.fullmatch(r"[vV]\d+", alias)
     ):
-        raise ValueError("Use an alias such as champion; latest and v<number> are reserved.")
+        raise ValueError(
+            "Use an alias such as champion; latest and v<number> are reserved."
+        )
 
 
 def _load_artifact(uri: str, client: MlflowClient) -> ImplicitRecommender:
     # Load all arrays before the temporary download directory is removed.
     with TemporaryDirectory(prefix="als-download-") as temporary:
         directory = download_artifacts(
-            artifact_uri=uri, dst_path=temporary, tracking_uri=client.tracking_uri,
+            artifact_uri=uri,
+            dst_path=temporary,
+            tracking_uri=client.tracking_uri,
         )
         return ImplicitRecommender.load(directory)
 
 
 def _check_run_model(model: ImplicitRecommender, run_id: str) -> None:
     if model.metadata.get("run_id") != run_id:
-        raise ValueError("The model manifest does not belong to the requested MLflow run.")
+        raise ValueError(
+            "The model manifest does not belong to the requested MLflow run."
+        )
 
 
 def _require_finished_run(client: MlflowClient, run_id: str) -> None:
@@ -104,7 +113,9 @@ def load_recommender(
             _check_alias(alias)
             registered = client.get_model_version_by_alias(name, alias)
         else:
-            raise ValueError("Use models:/<name>/<positive version> or models:/<name>@<alias>.")
+            raise ValueError(
+                "Use models:/<name>/<positive version> or models:/<name>@<alias>."
+            )
         if registered.status != "READY" or not registered.run_id:
             raise ValueError("The registered model must be READY and linked to a run.")
         version = str(registered.version)
@@ -115,7 +126,11 @@ def load_recommender(
         model = _load_artifact(download_uri, client)
         _check_run_model(model, registered.run_id)
         return LoadedRecommender(
-            model, f"models:/{name}/{version}", name, version, registered.run_id,
+            model,
+            f"models:/{name}/{version}",
+            name,
+            version,
+            registered.run_id,
         )
     if uri.startswith("runs:/"):
         match = re.fullmatch(r"runs:/([0-9a-fA-F]{32})/model", uri)
@@ -127,8 +142,12 @@ def load_recommender(
         model = _load_artifact(uri, client)
         _check_run_model(model, run_id)
         return LoadedRecommender(model, uri, run_id=run_id)
-    if re.match(r"^[A-Za-z][A-Za-z0-9+.-]*:", uri) and not re.match(r"^[A-Za-z]:[\\/]", uri):
-        raise ValueError("Only local paths, runs:/ URIs and models:/ URIs are supported.")
+    if re.match(r"^[A-Za-z][A-Za-z0-9+.-]*:", uri) and not re.match(
+        r"^[A-Za-z]:[\\/]", uri
+    ):
+        raise ValueError(
+            "Only local paths, runs:/ URIs and models:/ URIs are supported."
+        )
     directory = Path(source).resolve()
     model = ImplicitRecommender.load(directory)
     return LoadedRecommender(model, str(directory), run_id=model.metadata.get("run_id"))
@@ -138,7 +157,9 @@ def _existing_version(client: MlflowClient, name: str, run_id: str, source: str)
     page_token = None
     while True:
         versions = client.search_model_versions(
-            filter_string=f"run_id = '{run_id}'", max_results=1000, page_token=page_token,
+            filter_string=f"run_id = '{run_id}'",
+            max_results=1000,
+            page_token=page_token,
         )
         for registered in versions:
             if registered.name == name and registered.source == source:
@@ -150,7 +171,9 @@ def _existing_version(client: MlflowClient, name: str, run_id: str, source: str)
             return None
 
 
-def _check_recommendations(expected: ImplicitRecommender, actual: ImplicitRecommender) -> None:
+def _check_recommendations(
+    expected: ImplicitRecommender, actual: ImplicitRecommender
+) -> None:
     catalog = expected.training_data.tmdb_ids
     profiles = ([catalog[0]], [catalog[-1]], [], [max(catalog) + 1])
     for favorites in profiles:
@@ -160,11 +183,14 @@ def _check_recommendations(expected: ImplicitRecommender, actual: ImplicitRecomm
             [row["tmdb_id"] for row in before["recommendations"]]
             != [row["tmdb_id"] for row in after["recommendations"]]
         ):
-            raise ValueError("Registered model recommendations differ from the run bundle.")
+            raise ValueError(
+                "Registered model recommendations differ from the run bundle."
+            )
         if not np.allclose(
             [row["score"] for row in before["recommendations"]],
             [row["score"] for row in after["recommendations"]],
-            rtol=1e-6, atol=1e-7,
+            rtol=1e-6,
+            atol=1e-7,
         ):
             raise ValueError("Registered model scores differ from the run bundle.")
 
@@ -188,11 +214,14 @@ def register_model(
     client = MlflowClient(tracking_uri=tracking_uri, registry_uri=registry_uri)
     source = f"runs:/{run_id}/model"
     original = load_recommender(
-        source, tracking_uri=tracking_uri, registry_uri=registry_uri,
+        source,
+        tracking_uri=tracking_uri,
+        registry_uri=registry_uri,
     )
     try:
         client.create_registered_model(
-            name, description="Native implicit ALS model trained from simulated TMDB favorites.",
+            name,
+            description="Native implicit ALS model trained from simulated TMDB favorites.",
         )
     except MlflowException as exception:
         if exception.error_code != "RESOURCE_ALREADY_EXISTS":
@@ -200,16 +229,23 @@ def register_model(
     registered = _existing_version(client, name, run_id, source)
     if registered is None:
         registered = client.create_model_version(
-            name, source=source, run_id=run_id, await_creation_for=30,
+            name,
+            source=source,
+            run_id=run_id,
+            await_creation_for=30,
             tags={"format": "implicit-als-bundle", "validation_status": "pending"},
             description="Train-only ALS candidate; validation metrics remain linked to its run.",
         )
     model_uri = f"models:/{name}/{registered.version}"
     recovered = load_recommender(
-        model_uri, tracking_uri=tracking_uri, registry_uri=registry_uri,
+        model_uri,
+        tracking_uri=tracking_uri,
+        registry_uri=registry_uri,
     )
     _check_recommendations(original.model, recovered.model)
-    client.set_model_version_tag(name, registered.version, "validation_status", "passed")
+    client.set_model_version_tag(
+        name, registered.version, "validation_status", "passed"
+    )
     if alias is not None:
         client.set_registered_model_alias(name, alias, registered.version)
     return {
@@ -224,11 +260,15 @@ def register_model(
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
-    register = commands.add_parser("register", help="Register an existing, finished training run.")
+    register = commands.add_parser(
+        "register", help="Register an existing, finished training run."
+    )
     register.add_argument("--run-id", required=True)
     register.add_argument("--name", default=DEFAULT_MODEL_NAME)
     register.add_argument("--alias")
-    recommend = commands.add_parser("recommend", help="Load one model and recommend from TMDB favorites.")
+    recommend = commands.add_parser(
+        "recommend", help="Load one model and recommend from TMDB favorites."
+    )
     recommend.add_argument("--model-uri", required=True)
     recommend.add_argument("--favorites", type=int, nargs="*", default=[])
     recommend.add_argument("--n", type=int, default=10)
@@ -239,12 +279,17 @@ def main() -> None:
     try:
         if args.command == "register":
             result = register_model(
-                args.run_id, args.name, args.alias,
-                tracking_uri=args.tracking_uri, registry_uri=args.registry_uri,
+                args.run_id,
+                args.name,
+                args.alias,
+                tracking_uri=args.tracking_uri,
+                registry_uri=args.registry_uri,
             )
         else:
             loaded = load_recommender(
-                args.model_uri, tracking_uri=args.tracking_uri, registry_uri=args.registry_uri,
+                args.model_uri,
+                tracking_uri=args.tracking_uri,
+                registry_uri=args.registry_uri,
             )
             result = {
                 "name": loaded.name,

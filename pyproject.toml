@@ -1,0 +1,17 @@
+[tool.ruff]
+target-version = "py312"
+line-length = 88
+# Notebooks keep their executed outputs; Ruff checks the Python sources.
+extend-exclude = ["notebooks"]
+# unittest discovery puts tests/ on sys.path, so its helpers are first-party.
+src = [".", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "C4", "UP"]
+# The formatter sets code width, and report strings must stay as written.
+# zip(strict=...) would only check lengths that match by construction.
+ignore = ["E501", "B905"]
+
+[tool.ruff.format]
+# Git checks files out with CRLF on Windows; keep each file's line endings.
+line-ending = "auto"

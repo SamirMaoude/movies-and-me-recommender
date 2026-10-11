@@ -23,9 +23,13 @@ def load_params(path: Path) -> dict:
 
 def _evaluation_config(config: dict) -> dict:
     if not isinstance(config, dict) or set(config) != {
-        "positive_threshold", "train_end", "validation_end",
+        "positive_threshold",
+        "train_end",
+        "validation_end",
     }:
-        raise ValueError("evaluation needs positive_threshold, train_end and validation_end.")
+        raise ValueError(
+            "evaluation needs positive_threshold, train_end and validation_end."
+        )
     threshold = config["positive_threshold"]
     if (
         isinstance(threshold, bool)
@@ -33,7 +37,9 @@ def _evaluation_config(config: dict) -> dict:
         or not isfinite(threshold)
         or not 0.5 <= threshold <= 5.0
     ):
-        raise ValueError("positive_threshold must be a finite number between 0.5 and 5.")
+        raise ValueError(
+            "positive_threshold must be a finite number between 0.5 and 5."
+        )
     if utc_cutoff(config["train_end"]) >= utc_cutoff(config["validation_end"]):
         raise ValueError("train_end must be strictly before validation_end.")
     return {**config, "positive_threshold": float(threshold)}
@@ -42,7 +48,9 @@ def _evaluation_config(config: dict) -> dict:
 def _require_new_outputs(*paths: Path) -> None:
     for path in paths:
         if path.exists():
-            raise FileExistsError(f"Output already exists: {path}. Use dvc repro to manage stage outputs.")
+            raise FileExistsError(
+                f"Output already exists: {path}. Use dvc repro to manage stage outputs."
+            )
 
 
 def _write_json(path: Path, value: dict) -> None:
@@ -76,8 +84,14 @@ def _validation_metrics(report: dict, k: int) -> dict:
         metrics[name] = {}
         for metric in (f"recall_at_{k}", f"ndcg_at_{k}"):
             value = result["metrics"][metric]
-            if isinstance(value, bool) or not isinstance(value, Real) or not isfinite(value):
-                raise ValueError(f"Expected a finite validation metric: {name}.{metric}.")
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, Real)
+                or not isfinite(value)
+            ):
+                raise ValueError(
+                    f"Expected a finite validation metric: {name}.{metric}."
+                )
             metrics[name][metric] = float(value)
     return metrics
 
@@ -103,12 +117,18 @@ def train_stage(
     tracking_uri = os.environ.get("MLFLOW_TRACKING_URI", tracking["uri"])
     if not isinstance(tracking_uri, str) or not tracking_uri.strip():
         raise ValueError("Set a nonempty MLflow tracking URI.")
-    evaluation = _evaluation_config(json.loads(evaluation_path.read_text(encoding="utf-8")))
+    evaluation = _evaluation_config(
+        json.loads(evaluation_path.read_text(encoding="utf-8"))
+    )
     declared_evaluation = _evaluation_config(params["evaluation"])
     if evaluation != declared_evaluation:
-        raise ValueError("Prepared evaluation config differs from params.yaml. Run dvc repro prepare first.")
+        raise ValueError(
+            "Prepared evaluation config differs from params.yaml. Run dvc repro prepare first."
+        )
     if mlflow.active_run() is not None:
-        raise ValueError("Finish the active MLflow run before starting the DVC training stage.")
+        raise ValueError(
+            "Finish the active MLflow run before starting the DVC training stage."
+        )
     with TemporaryDirectory(prefix="dvc-train-") as temporary:
         experiments_path = Path(temporary) / "als.json"
         _write_json(experiments_path, params["als"])
@@ -116,7 +136,9 @@ def train_stage(
         previous_uri = mlflow.get_tracking_uri()
         mlflow.set_tracking_uri(tracking_uri)
         try:
-            report = run_experiment(data_dir, evaluation_path, experiments_path, model_dir)
+            report = run_experiment(
+                data_dir, evaluation_path, experiments_path, model_dir
+            )
         finally:
             mlflow.set_tracking_uri(previous_uri)
     _write_json(report_path, report)
@@ -127,25 +149,41 @@ def train_stage(
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="stage", required=True)
-    prepare = subparsers.add_parser("prepare", help="Audit data and export the frozen evaluation config.")
-    train = subparsers.add_parser("train", help="Train ALS trials and compare on validation.")
+    prepare = subparsers.add_parser(
+        "prepare", help="Audit data and export the frozen evaluation config."
+    )
+    train = subparsers.add_parser(
+        "train", help="Train ALS trials and compare on validation."
+    )
     for command in (prepare, train):
         command.add_argument("--params", type=Path, default=Path("params.yaml"))
         command.add_argument("--data-dir", type=Path, default=Path("data/raw"))
-        command.add_argument("--evaluation-config", type=Path, default=Path("artifacts/dvc/evaluation.json"))
+        command.add_argument(
+            "--evaluation-config",
+            type=Path,
+            default=Path("artifacts/dvc/evaluation.json"),
+        )
     prepare.add_argument("--output", type=Path, default=Path("reports/dvc/data.json"))
     train.add_argument("--artifact-dir", type=Path, default=Path("artifacts/dvc/model"))
-    train.add_argument("--output", type=Path, default=Path("reports/dvc/comparison.json"))
+    train.add_argument(
+        "--output", type=Path, default=Path("reports/dvc/comparison.json")
+    )
     train.add_argument("--metrics", type=Path, default=Path("reports/dvc/metrics.json"))
     args = parser.parse_args()
     try:
         if args.stage == "prepare":
-            report = prepare_stage(args.params, args.data_dir, args.evaluation_config, args.output)
+            report = prepare_stage(
+                args.params, args.data_dir, args.evaluation_config, args.output
+            )
             print(f"Data audit: {args.output}")
         else:
             report = train_stage(
-                args.params, args.data_dir, args.evaluation_config,
-                args.artifact_dir, args.output, args.metrics,
+                args.params,
+                args.data_dir,
+                args.evaluation_config,
+                args.artifact_dir,
+                args.output,
+                args.metrics,
             )
             print(f"Selected ALS trial: {report['selection']['selected_trial']}")
             print(f"Selected MLflow run: {report['selection']['selected_run_id']}")

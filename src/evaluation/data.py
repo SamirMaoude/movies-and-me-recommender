@@ -7,9 +7,13 @@ import pandas as pd
 
 from src.data.id_mapper import IdMapper
 
-
 INTERACTION_COLUMNS = [
-    "userId", "movieId", "tmdbId", "rating", "timestamp", "is_positive",
+    "userId",
+    "movieId",
+    "tmdbId",
+    "rating",
+    "timestamp",
+    "is_positive",
 ]
 MAX_INT64 = np.iinfo(np.int64).max
 # Last UTC second representable with a four-digit year (9999-12-31).
@@ -30,7 +34,9 @@ def _require_integers(values: pd.Series, minimum: int) -> None:
         or values.lt(minimum).any()
         or values.gt(MAX_INT64).any()
     ):
-        raise ValueError(f"{values.name} must contain integers between {minimum} and {MAX_INT64}.")
+        raise ValueError(
+            f"{values.name} must contain integers between {minimum} and {MAX_INT64}."
+        )
 
 
 def _event_times(timestamps: pd.Series) -> pd.Series:
@@ -52,7 +58,9 @@ def utc_cutoff(value: str | pd.Timestamp) -> pd.Timestamp:
     except (ValueError, TypeError, OverflowError) as exc:
         raise ValueError("Cutoffs must be timezone-aware dates.") from exc
     if pd.isna(cutoff) or cutoff.tzinfo is None:
-        raise ValueError("Cutoffs must include a timezone, for example 2016-01-01T00:00:00Z.")
+        raise ValueError(
+            "Cutoffs must include a timezone, for example 2016-01-01T00:00:00Z."
+        )
     return cutoff.tz_convert("UTC")
 
 
@@ -80,13 +88,18 @@ def prepare_interactions(
         or not np.isfinite(positive_threshold)
         or not 0.5 <= positive_threshold <= 5.0
     ):
-        raise ValueError("positive_threshold must be a finite number between 0.5 and 5.")
+        raise ValueError(
+            "positive_threshold must be a finite number between 0.5 and 5."
+        )
     for column in ("userId", "movieId"):
         _require_integers(ratings[column], 1)
     _event_times(ratings["timestamp"])
     scores = ratings["rating"]
     if (
-        not (pd.api.types.is_integer_dtype(scores.dtype) or pd.api.types.is_float_dtype(scores.dtype))
+        not (
+            pd.api.types.is_integer_dtype(scores.dtype)
+            or pd.api.types.is_float_dtype(scores.dtype)
+        )
         or scores.isna().any()
     ):
         raise ValueError("rating must contain numbers from 0.5 to 5 in steps of 0.5.")
@@ -113,12 +126,15 @@ def prepare_interactions(
                 raise ValueError("links tmdbId exceeds the supported integer range.")
             associations.append((source_movie_id, mapper.to_movie_id(tmdb_id), tmdb_id))
     linked_movies = pd.DataFrame(
-        associations, columns=["source_movieId", "movieId", "tmdbId"],
+        associations,
+        columns=["source_movieId", "movieId", "tmdbId"],
     ).astype("int64")
     source = ratings.loc[:, ["userId", "movieId", "rating", "timestamp"]].rename(
         columns={"movieId": "source_movieId"},
     )
-    linked = source.merge(linked_movies, on="source_movieId", how="inner", validate="many_to_one")
+    linked = source.merge(
+        linked_movies, on="source_movieId", how="inner", validate="many_to_one"
+    )
     remapped = int(linked["source_movieId"].ne(linked["movieId"]).sum())
     prepared = (
         linked.sort_values(["timestamp", "source_movieId", "userId"])

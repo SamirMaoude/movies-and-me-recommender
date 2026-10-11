@@ -9,7 +9,6 @@ from scipy.sparse import isspmatrix_csr
 
 from src.models.content_based import ContentBasedRecommender, tokenize_genres
 
-
 RESULT_COLUMNS = ["movieId", "title", "genres", "score"]
 
 
@@ -166,12 +165,14 @@ class RecommendationTests(unittest.TestCase):
             result["score"].to_numpy(),
             [1 / math.sqrt(2), 1 / math.sqrt(2), 1 / math.sqrt(3)],
         )
-        self.assertEqual(result["title"].tolist(), [
-            "Action and drama", "Action and comedy", "All three"
-        ])
-        self.assertEqual(result["genres"].tolist(), [
-            "Action|Drama", "Action|Comedy", "Action|Comedy|Drama"
-        ])
+        self.assertEqual(
+            result["title"].tolist(),
+            ["Action and drama", "Action and comedy", "All three"],
+        )
+        self.assertEqual(
+            result["genres"].tolist(),
+            ["Action|Drama", "Action|Comedy", "Action|Comedy|Drama"],
+        )
 
     def test_cosine_renormalizes_the_mean_profile_before_scoring(self):
         result = self.model.recommend([10, 20])
@@ -187,7 +188,7 @@ class RecommendationTests(unittest.TestCase):
         # [1, 0, 0] and [1/sqrt(2), 0, 1/sqrt(2)] form the profile.
         action = 1 + 1 / math.sqrt(2)
         drama = 1 / math.sqrt(2)
-        length = math.sqrt(action ** 2 + drama ** 2)
+        length = math.sqrt(action**2 + drama**2)
         expected_scores = {
             20: drama / length,
             50: action / (math.sqrt(2) * length),

@@ -55,7 +55,9 @@ def validation_coverage(train: pd.DataFrame, validation: pd.DataFrame) -> dict:
         "targets_unknown_user_known_movie": int((~known_user & known_movie).sum()),
         "targets_unknown_user_unknown_movie": int((~known_user & ~known_movie).sum()),
         "catalog_coverage": float(known_movie.mean()) if len(targets) else None,
-        "eligible_user_coverage": eligible_users / target_users if target_users else None,
+        "eligible_user_coverage": eligible_users / target_users
+        if target_users
+        else None,
     }
 
 
@@ -64,10 +66,14 @@ def build_report(data_dir: Path, config_path: Path) -> dict:
     config = json.loads(config_path.read_text(encoding="utf-8"))
     required = {"positive_threshold", "train_end", "validation_end"}
     if not isinstance(config, dict) or set(config) != required:
-        raise ValueError("Evaluation config must contain positive_threshold, train_end and validation_end.")
+        raise ValueError(
+            "Evaluation config must contain positive_threshold, train_end and validation_end."
+        )
     tables = load_movielens(data_dir)
     interactions, preparation = prepare_interactions(
-        tables["ratings"], tables["links"], config["positive_threshold"],
+        tables["ratings"],
+        tables["links"],
+        config["positive_threshold"],
     )
     splits = temporal_split(interactions, config["train_end"], config["validation_end"])
     return {
@@ -92,7 +98,9 @@ def build_report(data_dir: Path, config_path: Path) -> dict:
         },
         "preparation": preparation,
         "splits": {name: split_summary(frame) for name, frame in splits.items()},
-        "validation_coverage": validation_coverage(splits["train"], splits["validation"]),
+        "validation_coverage": validation_coverage(
+            splits["train"], splits["validation"]
+        ),
     }
 
 
@@ -100,11 +108,15 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data-dir", type=Path, default=Path("data/raw"))
     parser.add_argument("--config", type=Path, default=Path("config/evaluation.json"))
-    parser.add_argument("--output", type=Path, default=Path("reports/evaluation_data.json"))
+    parser.add_argument(
+        "--output", type=Path, default=Path("reports/evaluation_data.json")
+    )
     args = parser.parse_args()
     report = build_report(args.data_dir, args.config)
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(json.dumps(report, indent=2, allow_nan=False) + "\n", encoding="utf-8")
+    args.output.write_text(
+        json.dumps(report, indent=2, allow_nan=False) + "\n", encoding="utf-8"
+    )
     print(f"Evaluation data report: {args.output}")
 
 

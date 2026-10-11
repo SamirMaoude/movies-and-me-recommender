@@ -1,8 +1,8 @@
 """Create a small ALS bundle for container checks, using synthetic data."""
 
 import argparse
-from pathlib import Path
 import sys
+from pathlib import Path
 
 import pandas as pd
 

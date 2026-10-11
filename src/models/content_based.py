@@ -37,7 +37,9 @@ class ContentBasedRecommender:
 
     def __init__(self, movies: pd.DataFrame, *, include_imax: bool = False):
         required_columns = ["movieId", "title", "genres"]
-        if not isinstance(movies, pd.DataFrame) or not set(required_columns).issubset(movies.columns):
+        if not isinstance(movies, pd.DataFrame) or not set(required_columns).issubset(
+            movies.columns
+        ):
             raise ValueError("Catalog must contain movieId, title and genres columns.")
         if movies.empty:
             raise ValueError("Catalog must contain at least one movie.")
@@ -46,7 +48,8 @@ class ContentBasedRecommender:
         ids = movies["movieId"]
         if ids.isna().any() or any(
             isinstance(movie_id, (bool, np.bool_))
-            or not isinstance(movie_id, Integral) or movie_id <= 0
+            or not isinstance(movie_id, Integral)
+            or movie_id <= 0
             for movie_id in ids
         ):
             raise ValueError("Catalog movieId values must be positive integers.")
@@ -81,12 +84,15 @@ class ContentBasedRecommender:
         try:
             favorites = list(favorite_movie_ids)
         except TypeError as exc:
-            raise ValueError("favorite_movie_ids must be an iterable of positive integers.") from exc
+            raise ValueError(
+                "favorite_movie_ids must be an iterable of positive integers."
+            ) from exc
         if not favorites:
             raise ValueError("At least one favorite movieId is required.")
         if any(
             isinstance(movie_id, (bool, np.bool_))
-            or not isinstance(movie_id, Integral) or movie_id <= 0
+            or not isinstance(movie_id, Integral)
+            or movie_id <= 0
             for movie_id in favorites
         ):
             raise ValueError("Favorite movieId values must be positive integers.")
@@ -99,7 +105,9 @@ class ContentBasedRecommender:
         profile = np.asarray(self.feature_matrix[positions].mean(axis=0))
         if not np.any(profile):
             raise ValueError("Favorites have no usable genres; cannot build a profile.")
-        scores = np.clip(cosine_similarity(profile, self.feature_matrix).ravel(), 0.0, 1.0)
+        scores = np.clip(
+            cosine_similarity(profile, self.feature_matrix).ravel(), 0.0, 1.0
+        )
         candidates = self.movies.copy()
         candidates["score"] = scores
         candidates = candidates.loc[
@@ -107,5 +115,6 @@ class ContentBasedRecommender:
         ]
         return (
             candidates.sort_values(["score", "movieId"], ascending=[False, True])
-            .head(int(n)).reset_index(drop=True)
+            .head(int(n))
+            .reset_index(drop=True)
         )

@@ -138,7 +138,18 @@ class IdMapperConstructionTests(unittest.TestCase):
                     IdMapper(pd.DataFrame({"movieId": [1, 1], "tmdbId": tmdb_ids}))
 
     def test_movie_ids_reject_missing_nonpositive_and_nonintegral_values(self):
-        invalid_ids = (None, pd.NA, np.nan, 0, -1, 1.5, "1", True, np.bool_(True), np.inf)
+        invalid_ids = (
+            None,
+            pd.NA,
+            np.nan,
+            0,
+            -1,
+            1.5,
+            "1",
+            True,
+            np.bool_(True),
+            np.inf,
+        )
         for invalid_id in invalid_ids:
             with self.subTest(invalid_id=invalid_id):
                 links = pd.DataFrame(

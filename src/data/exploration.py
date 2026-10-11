@@ -4,16 +4,19 @@ from pathlib import Path
 
 import pandas as pd
 
-
 SCHEMAS = {
     "movies": {"movieId": "int64", "title": "string", "genres": "string"},
     "ratings": {
-        "userId": "int64", "movieId": "int64", "rating": "float64",
+        "userId": "int64",
+        "movieId": "int64",
+        "rating": "float64",
         "timestamp": "int64",
     },
     "links": {"movieId": "int64", "imdbId": "string", "tmdbId": "Int64"},
     "tags": {
-        "userId": "int64", "movieId": "int64", "tag": "string",
+        "userId": "int64",
+        "movieId": "int64",
+        "tag": "string",
         "timestamp": "int64",
     },
 }
@@ -33,16 +36,22 @@ def load_movielens(data_dir: str | Path) -> dict[str, pd.DataFrame]:
     Raise an error if a file is missing or its columns differ from the schema.
     """
     data_dir = Path(data_dir)
-    missing = [f"{name}.csv" for name in SCHEMAS if not (data_dir / f"{name}.csv").is_file()]
+    missing = [
+        f"{name}.csv" for name in SCHEMAS if not (data_dir / f"{name}.csv").is_file()
+    ]
     if missing:
-        raise FileNotFoundError(f"Missing MovieLens files in {data_dir}: {', '.join(missing)}")
+        raise FileNotFoundError(
+            f"Missing MovieLens files in {data_dir}: {', '.join(missing)}"
+        )
 
     tables = {}
     for name, schema in SCHEMAS.items():
         path = data_dir / f"{name}.csv"
         frame = pd.read_csv(path, dtype=schema, encoding="utf-8")
         if set(frame.columns) != set(schema):
-            raise ValueError(f"Unexpected columns in {path.name}: {list(frame.columns)}")
+            raise ValueError(
+                f"Unexpected columns in {path.name}: {list(frame.columns)}"
+            )
         tables[name] = frame
     return tables
 
@@ -51,19 +60,22 @@ def data_quality_report(tables: dict[str, pd.DataFrame]) -> pd.DataFrame:
     """Count missing cells, duplicate rows and extra rows sharing a logical key."""
     rows = []
     for name, frame in tables.items():
-        rows.append({
-            "dataset": name,
-            "num_rows": len(frame),
-            "num_columns": len(frame.columns),
-            "missing_cells": int(frame.isna().sum().sum()),
-            "duplicate_rows": int(frame.duplicated().sum()),
-            "duplicate_keys": int(frame.duplicated(subset=TABLE_KEYS[name]).sum()),
-        })
+        rows.append(
+            {
+                "dataset": name,
+                "num_rows": len(frame),
+                "num_columns": len(frame.columns),
+                "missing_cells": int(frame.isna().sum().sum()),
+                "duplicate_rows": int(frame.duplicated().sum()),
+                "duplicate_keys": int(frame.duplicated(subset=TABLE_KEYS[name]).sum()),
+            }
+        )
     return pd.DataFrame(rows).set_index("dataset")
 
 
 def interaction_tables(
-    movies: pd.DataFrame, ratings: pd.DataFrame,
+    movies: pd.DataFrame,
+    ratings: pd.DataFrame,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Return counts and mean scores per user and per catalog movie.
 
@@ -88,10 +100,13 @@ def genre_counts(movies: pd.DataFrame) -> pd.Series:
     memberships = memberships.explode("genres")
     memberships["genres"] = memberships["genres"].str.strip()
     memberships = memberships.dropna(subset=["genres"])
-    memberships = memberships.loc[~memberships["genres"].isin(["", "(no genres listed)"])]
+    memberships = memberships.loc[
+        ~memberships["genres"].isin(["", "(no genres listed)"])
+    ]
     return (
         memberships.drop_duplicates(["movieId", "genres"])["genres"]
-        .value_counts().rename("num_movies")
+        .value_counts()
+        .rename("num_movies")
     )
 
 
@@ -106,8 +121,12 @@ def summarize_dataset(tables: dict[str, pd.DataFrame]) -> dict[str, int | float]
     num_users = ratings["userId"].nunique()
     num_ratings = len(ratings)
     if num_movies == 0 or num_ratings == 0 or num_users == 0:
-        raise ValueError("The exploration summary requires nonempty movies and ratings.")
-    movies_with_links = movies.merge(links, on="movieId", how="left", validate="one_to_one")
+        raise ValueError(
+            "The exploration summary requires nonempty movies and ratings."
+        )
+    movies_with_links = movies.merge(
+        links, on="movieId", how="left", validate="one_to_one"
+    )
     tmdb_coverage = movies_with_links["tmdbId"].notna().mean()
     return {
         "num_movies": num_movies,

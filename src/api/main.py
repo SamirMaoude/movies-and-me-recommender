@@ -16,7 +16,6 @@ from src.api.schemas import (
 )
 from src.api.service import RecommendationService
 
-
 DEFAULT_MODEL_URI = "models:/movies-and-me-als/1"
 logger = logging.getLogger(__name__)
 
@@ -46,15 +45,20 @@ def create_app(
         try:
             factory = service_factory or RecommendationService.from_source
             application.state.service = factory(
-                model_uri if model_uri is not None else os.getenv(
-                    "MODEL_URI", DEFAULT_MODEL_URI,
+                model_uri
+                if model_uri is not None
+                else os.getenv(
+                    "MODEL_URI",
+                    DEFAULT_MODEL_URI,
                 ),
                 tracking_uri=(
-                    tracking_uri if tracking_uri is not None
+                    tracking_uri
+                    if tracking_uri is not None
                     else os.getenv("MLFLOW_TRACKING_URI")
                 ),
                 registry_uri=(
-                    registry_uri if registry_uri is not None
+                    registry_uri
+                    if registry_uri is not None
                     else os.getenv("MLFLOW_REGISTRY_URI")
                 ),
             )
@@ -86,7 +90,8 @@ def create_app(
         except Exception:
             logger.exception("Recommendation computation failed.")
             raise HTTPException(
-                status_code=500, detail="Recommendation computation failed.",
+                status_code=500,
+                detail="Recommendation computation failed.",
             ) from None
 
     return application

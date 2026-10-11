@@ -77,10 +77,16 @@ def _collect_provenance(data_dir: Path) -> dict:
     """Identify the input files, environment and Git state before training."""
     repo_dir = Path(__file__).resolve().parents[2]
     commit = subprocess.check_output(
-        ["git", "rev-parse", "HEAD"], cwd=repo_dir, text=True, encoding="utf-8",
+        ["git", "rev-parse", "HEAD"],
+        cwd=repo_dir,
+        text=True,
+        encoding="utf-8",
     ).strip()
     status = subprocess.check_output(
-        ["git", "status", "--porcelain"], cwd=repo_dir, text=True, encoding="utf-8",
+        ["git", "status", "--porcelain"],
+        cwd=repo_dir,
+        text=True,
+        encoding="utf-8",
     )
     return {
         "git": {"commit": commit, "dirty": bool(status.strip())},
@@ -93,8 +99,13 @@ def _collect_provenance(data_dir: Path) -> dict:
             **{
                 package: version(package)
                 for package in (
-                    "implicit", "numpy", "scipy", "pandas", "scikit-learn",
-                    "threadpoolctl", "mlflow",
+                    "implicit",
+                    "numpy",
+                    "scipy",
+                    "pandas",
+                    "scikit-learn",
+                    "threadpoolctl",
+                    "mlflow",
                 )
             },
         },
@@ -144,14 +155,16 @@ def run_experiment(
         )
     k = experiment_config["k"]
     report = compare_models(train, validation, tables["movies"], tables["links"], k)
-    provenance.update({
-        "evaluation_config": evaluation_config,
-        "experiment_config": experiment_config,
-        "preparation": preparation,
-        "splits": {
-            name: split_summary(splits[name]) for name in ("train", "validation")
-        },
-    })
+    provenance.update(
+        {
+            "evaluation_config": evaluation_config,
+            "experiment_config": experiment_config,
+            "preparation": preparation,
+            "splits": {
+                name: split_summary(splits[name]) for name in ("train", "validation")
+            },
+        }
+    )
 
     mlflow.set_experiment("movies-and-me-recommender")
 
@@ -164,10 +177,12 @@ def run_experiment(
 
         with mlflow.start_run(run_name=declared["name"]) as run:
             run_id = run.info.run_id
-            mlflow.set_tags({
-                "git.commit": provenance["git"]["commit"],
-                "git.dirty": str(provenance["git"]["dirty"]).lower(),
-            })
+            mlflow.set_tags(
+                {
+                    "git.commit": provenance["git"]["commit"],
+                    "git.dirty": str(provenance["git"]["dirty"]).lower(),
+                }
+            )
             mlflow.log_dict(provenance, "provenance.json")
             mlflow.log_params(
                 {
@@ -196,10 +211,12 @@ def run_experiment(
                 k,
             )
 
-            mlflow.log_metrics({
-                f"validation_{name}": value
-                for name, value in evaluation["metrics"].items()
-            })
+            mlflow.log_metrics(
+                {
+                    f"validation_{name}": value
+                    for name, value in evaluation["metrics"].items()
+                }
+            )
             mlflow.log_metric("training_seconds", training_seconds)
             mlflow.log_metric(
                 "validation_users",
