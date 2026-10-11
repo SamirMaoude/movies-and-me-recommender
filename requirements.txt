@@ -14,5 +14,7 @@ threadpoolctl==3.7.0
 # Experiment tracking and local model artifacts.
 mlflow==3.17.0
 # Data versioning and reproducible pipelines.
-dvc==3.67.1
+dvc[s3]==3.67.1
+# Browser-based AWS login for DVC's S3 client.
+botocore[crt]==1.43.106
 PyYAML==6.0.3

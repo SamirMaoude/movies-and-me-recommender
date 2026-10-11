@@ -1,0 +1,5 @@
+[core]
+    remote = cloud
+['remote "cloud"']
+    url = s3://movies-and-me/movies-and-me-recommender
+    region = eu-north-1

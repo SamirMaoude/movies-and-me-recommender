@@ -9,9 +9,9 @@ La [feuille de route](ROADMAP.md) décrit cette direction. Les phases 1 à 6
 sont réalisées : ALS est entraîné, comparé aux références et rechargeable
 à partir de ses fichiers ou d'une version du registre MLflow. Chaque essai
 conserve les informations sur le code, les données et l'environnement.
-La phase 7 ajoute le suivi des données et du pipeline avec DVC. Le stockage
-local permet de vérifier la récupération ; un stockage partagé reste à
-configurer pour une autre machine et la CI.
+La phase 7 ajoute le suivi des données et du pipeline avec DVC. La
+récupération locale est vérifiée ; l'accès au stockage S3 reste à valider
+pour une autre machine et la CI.
 Le modèle par genres reste disponible pour les comparaisons.
 
 ## Phase 1 : exploration de MovieLens
@@ -599,9 +599,10 @@ d'un run inachevé. La phase 6 est terminée.
 
 ## Phase 7 : données et pipeline avec DVC
 
-Le dépôt est initialisé avec **DVC 3.67.1**, dont la version est fixée dans
-[requirements.txt](requirements.txt). Pour installer les dépendances dans
-une nouvelle copie du projet, depuis la racine avec `.venv` activé :
+Le dépôt est initialisé avec **DVC 3.67.1**. Les dépendances pour S3 et la
+connexion AWS par navigateur sont fixées dans
+[requirements.txt](requirements.txt). Pour les installer dans une nouvelle
+copie du projet, depuis la racine avec `.venv` activé :
 
 ```bat
 python -m pip install -r requirements.txt
@@ -639,33 +640,45 @@ pipeline disponibles pour la version Git courante. Elle ne récupère ni le
 code ni les fichiers de configuration : ceux-ci viennent de Git.
 [Documentation DVC](https://doc.dvc.org/command-reference/pull).
 
-Ce dossier local suffit aux essais sur ce PC. Pour travailler sur une autre
-machine ou dans la CI, il faudra un stockage partagé, puis y envoyer les
-données et les sorties avec `dvc push`. L'adresse du stockage et ses
-identifiants doivent être configurés dans chaque environnement ; les
-identifiants restent hors du dépôt. L'option `--local` permet de garder
-cette configuration dans `.dvc/config.local`.
-[Configuration des stockages DVC](https://doc.dvc.org/command-reference/remote/add).
+Ce dossier local suffit aux essais sur ce PC. Le stockage partagé choisi
+est **Amazon S3**, dans le bucket `movies-and-me`, en région Stockholm
+(`eu-north-1`). Le remote `cloud` désigne
+`s3://movies-and-me/movies-and-me-recommender`. Son adresse et sa région
+sont enregistrées dans `.dvc/config`, suivi par Git. L'authentification et
+le transfert restent à vérifier ; le remote `local` reste celui par défaut
+sur ce PC.
 
-Amazon S3 est une possibilité pour ce stockage partagé ; aucun bucket n'est
-configuré pour le moment. Une fois le bucket créé et un profil AWS nommé
-`movies-and-me` configuré sur le PC, remplacer `NOM_DU_BUCKET` dans ces
-commandes :
+Pour l'authentification interactive, installer
+[AWS CLI version 2](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html),
+puis ouvrir un nouveau terminal. `aws login`, disponible à partir de la
+version 2.32.0, permet de réutiliser la connexion à la console AWS dans le
+navigateur. Pour une identité IAM, l'accès local demande la permission
+`SignInLocalDevelopmentAccess`. Si le compte utilise IAM Identity Center,
+configurer plutôt la connexion avec `aws configure sso`.
+[Connexion AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-sign-in.html),
+[connexion avec IAM Identity Center](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-sso.html).
+
+Les commandes suivantes créent le profil `movies-and-me`, vérifient la
+connexion et le choisissent pour le remote DVC :
 
 ```bat
-python -m pip install "dvc[s3]==3.67.1"
-dvc remote add -d cloud s3://NOM_DU_BUCKET/movies-and-me-recommender
+aws --version
+aws configure set region eu-north-1 --profile movies-and-me
+aws login --profile movies-and-me
+aws sts get-caller-identity --profile movies-and-me
 dvc remote modify --local cloud profile movies-and-me
 dvc push -r cloud
 ```
 
-L'adresse du bucket sera alors dans `.dvc/config`, à conserver dans Git.
-Le profil est choisi localement et les clés d'accès restent dans la
-configuration AWS. Le stockage local reste disponible avec `-r local`.
-Avant de remplacer ce stockage pour les prochaines étapes, vérifier un
-`dvc pull -r cloud` depuis une nouvelle copie du dépôt.
-Après cette vérification, `dvc remote default --local cloud` permet de
-choisir le cloud par défaut sur ce PC à la place du dossier local.
+La connexion se termine dans le navigateur. Le nom du profil est enregistré
+dans `.dvc/config.local` ; les identifiants temporaires et les sessions
+restent dans la configuration AWS, hors du dépôt. Lorsque la session
+expire, relancer `aws login --profile movies-and-me` avant le transfert.
+
+Après le transfert, vérifier un `dvc pull -r cloud` depuis une nouvelle
+copie avec un cache vide, puis recharger le modèle. Après cette validation,
+`dvc remote default --local cloud` permettra de choisir le cloud par défaut
+sur ce PC. Le stockage local restera disponible avec `-r local`.
 [DVC avec Amazon S3](https://doc.dvc.org/user-guide/data-management/remote-storage/amazon-s3).
 
 ### Relancer le pipeline
@@ -736,8 +749,9 @@ La vérification locale a récupéré les quatre CSV dans un dossier neuf avec
 un cache vide, avec les mêmes SHA-256. Le pipeline a ensuite été exécuté
 depuis un clone propre. Une seconde exécution sans changement a été sautée ;
 une relance forcée a retrouvé les mêmes métriques et un modèle rechargeable,
-sans changer `champion`. Les 216 tests passent. L'accès depuis une autre
-machine et la CI reste à vérifier avec un stockage partagé.
+sans changer `champion`. Les 216 tests passent. L'authentification AWS,
+le transfert vers S3 et la récupération depuis une autre machine ou la CI
+restent à vérifier.
 
 ## Reproduire l'analyse
 
