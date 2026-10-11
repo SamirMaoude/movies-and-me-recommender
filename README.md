@@ -159,9 +159,7 @@ La [notice MovieLens](data/raw/README.md) contient la description des fichiers,
 la licence et la citation à conserver avec les données.
 
 Les quatre CSV se trouvent dans `data/raw/` : `movies.csv`, `ratings.csv`,
-`links.csv` et `tags.csv`. DVC les suit avec leurs fichiers `.dvc` ; les CSV
-des premières versions du projet restent présents dans l'historique Git.
-`dvc init` a déjà été exécuté et n'est pas nécessaire après un clonage.
+`links.csv` et `tags.csv`. DVC les suit avec leurs fichiers `.dvc`.
 
 Le remote `cloud`, défini dans [.dvc/config](.dvc/config), utilise
 `s3://movies-and-me/movies-and-me-recommender` en région `eu-north-1`.
@@ -354,9 +352,9 @@ Ce petit groupe ne permet pas de conclure sur tous les utilisateurs de
 l'application. La qualité des réponses sans favori connu n'est pas mesurée
 par cette comparaison.
 
-Le modèle sauvegardé reste entraîné sur l'apprentissage uniquement.
-Le test final n'a pas été utilisé. Le réentraînement sur apprentissage et
-validation, puis l'évaluation finale sur le test, restent à faire.
+Le modèle sauvegardé est entraîné uniquement sur le groupe d'apprentissage.
+Les scores présentés proviennent de la validation ; le jeu de test n'a pas
+été utilisé.
 
 Les rapports détaillent le protocole, les résultats et les limites :
 
@@ -426,7 +424,3 @@ python -m ruff check src tests scripts --select E9,F63,F7,F82
 python -m ruff format --check scripts
 python -m unittest discover -s tests -v
 ```
-
-Les 241 tests, les contrôles Ruff et le test Docker ont été vérifiés localement
-sous Linux. La première exécution du workflow sur GitHub reste à vérifier
-après publication de la branche.

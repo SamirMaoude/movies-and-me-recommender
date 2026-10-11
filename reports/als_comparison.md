@@ -74,12 +74,11 @@ MovieLens restent une approximation des favoris réels de l'application.
 
 ## Modèle sauvegardé et reproduction
 
-Le modèle retenu reste entraîné sur l'apprentissage uniquement. Ses facteurs,
-sa matrice, ses correspondances d'IDs, la popularité et son manifeste sont
-dans `artifacts/implicit-als/`, ignoré par Git. Le chargement vérifie les
-dimensions et les empreintes, puis permet de recommander sans relire les CSV.
-Le réentraînement sur apprentissage et validation, puis la mesure finale
-sur le test, restent à faire après fixation des choix.
+Le modèle retenu est entraîné uniquement sur le groupe d'apprentissage.
+Ses facteurs, sa matrice, ses correspondances d'IDs, la popularité et son
+manifeste sont dans `artifacts/implicit-als/`, ignoré par Git. Le chargement
+vérifie les dimensions et les empreintes, puis permet de recommander sans
+relire les CSV.
 
 Depuis la racine du dépôt, sous PowerShell :
 
