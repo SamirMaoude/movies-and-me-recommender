@@ -30,6 +30,13 @@ def _ready_service(request: Request) -> RecommendationService:
 ReadyService = Annotated[RecommendationService, Depends(_ready_service)]
 
 
+def _setting(
+    value: str | None, variable: str, default: str | None = None
+) -> str | None:
+    """Prefer an explicit value, otherwise read the environment at startup."""
+    return os.getenv(variable, default) if value is None else value
+
+
 def create_app(
     model_uri: str | None = None,
     *,
@@ -37,30 +44,16 @@ def create_app(
     registry_uri: str | None = None,
     service_factory: Callable[..., RecommendationService] | None = None,
 ) -> FastAPI:
-    """Create the API without downloading or loading a model yet."""
+    """Create the API; the model is loaded when the application starts."""
 
     @asynccontextmanager
     async def lifespan(application: FastAPI):
-        application.state.service = None
         try:
             factory = service_factory or RecommendationService.from_source
             application.state.service = factory(
-                model_uri
-                if model_uri is not None
-                else os.getenv(
-                    "MODEL_URI",
-                    DEFAULT_MODEL_URI,
-                ),
-                tracking_uri=(
-                    tracking_uri
-                    if tracking_uri is not None
-                    else os.getenv("MLFLOW_TRACKING_URI")
-                ),
-                registry_uri=(
-                    registry_uri
-                    if registry_uri is not None
-                    else os.getenv("MLFLOW_REGISTRY_URI")
-                ),
+                _setting(model_uri, "MODEL_URI", DEFAULT_MODEL_URI),
+                tracking_uri=_setting(tracking_uri, "MLFLOW_TRACKING_URI"),
+                registry_uri=_setting(registry_uri, "MLFLOW_REGISTRY_URI"),
             )
             yield
         finally:

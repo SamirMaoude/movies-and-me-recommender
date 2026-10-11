@@ -20,7 +20,7 @@ DEFAULT_MODEL_NAME = "movies-and-me-als"
 
 @dataclass(frozen=True)
 class LoadedRecommender:
-    """Keep the resolved identity alongside a fully loaded, independent model."""
+    """A loaded model and the registry identity it was resolved from."""
 
     model: ImplicitRecommender
     model_uri: str
@@ -35,54 +35,19 @@ class LoadedRecommender:
         return self.model.recommend_with_method(favorites, n=n)
 
 
-def _check_run_id(run_id: str) -> None:
-    if not isinstance(run_id, str) or not re.fullmatch(r"[0-9a-fA-F]{32}", run_id):
-        raise ValueError("run_id must be a 32-character MLflow run ID.")
-
-
-def _check_name(name: str) -> None:
-    if (
-        not isinstance(name, str)
-        or not name.strip()
-        or name != name.strip()
-        or any(character in name for character in "/@?#")
-    ):
-        raise ValueError("Model name must be nonempty and contain no /, @, ? or #.")
-
-
-def _check_alias(alias: str | None) -> None:
-    if alias is not None and (
-        not isinstance(alias, str)
-        or not re.fullmatch(r"[A-Za-z0-9_-]+", alias)
-        or alias.lower() == "latest"
-        or re.fullmatch(r"[vV]\d+", alias)
-    ):
-        raise ValueError(
-            "Use an alias such as champion; latest and v<number> are reserved."
-        )
-
-
-def _load_artifact(uri: str, client: MlflowClient) -> ImplicitRecommender:
+def _load_run_model(client: MlflowClient, uri: str, run_id: str) -> ImplicitRecommender:
+    """Load a bundle logged by a finished run, whose manifest must name that run."""
+    if client.get_run(run_id).info.status != "FINISHED":
+        raise ValueError("Only a FINISHED MLflow run can supply a model.")
     # Load all arrays before the temporary download directory is removed.
     with TemporaryDirectory(prefix="als-download-") as temporary:
         directory = download_artifacts(
-            artifact_uri=uri,
-            dst_path=temporary,
-            tracking_uri=client.tracking_uri,
+            artifact_uri=uri, dst_path=temporary, tracking_uri=client.tracking_uri
         )
-        return ImplicitRecommender.load(directory)
-
-
-def _check_run_model(model: ImplicitRecommender, run_id: str) -> None:
+        model = ImplicitRecommender.load(directory)
     if model.metadata.get("run_id") != run_id:
-        raise ValueError(
-            "The model manifest does not belong to the requested MLflow run."
-        )
-
-
-def _require_finished_run(client: MlflowClient, run_id: str) -> None:
-    if client.get_run(run_id).info.status != "FINISHED":
-        raise ValueError("Only a FINISHED MLflow run can supply a model.")
+        raise ValueError("The model manifest does not belong to the requested run.")
+    return model
 
 
 def load_recommender(
@@ -91,26 +56,15 @@ def load_recommender(
     tracking_uri: str | None = None,
     registry_uri: str | None = None,
 ) -> LoadedRecommender:
-    """Load a local bundle, a run artifact or an exact registered model version.
-
-    An alias is resolved once. The returned model_uri always records the numeric
-    version, and the in-memory model no longer needs MLflow or the downloaded files.
-    """
-    if not isinstance(source, (str, Path)) or not str(source).strip():
-        raise ValueError("Provide a bundle path, runs:/ URI or models:/ URI.")
+    """Load a local bundle, a run's bundle, or a registered version or alias."""
     uri = str(source)
     if uri.startswith("models:/"):
         client = MlflowClient(tracking_uri=tracking_uri, registry_uri=registry_uri)
-        version_match = re.fullmatch(r"models:/([^/@?#]+)/([1-9]\d*)", uri)
-        alias_match = re.fullmatch(r"models:/([^/@?#]+)@([^/@?#]+)", uri)
-        if version_match:
-            name, version = version_match.groups()
-            _check_name(name)
+        if match := re.fullmatch(r"models:/([^/@?#]+)/([1-9]\d*)", uri):
+            name, version = match.groups()
             registered = client.get_model_version(name, version)
-        elif alias_match:
-            name, alias = alias_match.groups()
-            _check_name(name)
-            _check_alias(alias)
+        elif match := re.fullmatch(r"models:/([^/@?#]+)@([^/@?#]+)", uri):
+            name, alias = match.groups()
             registered = client.get_model_version_by_alias(name, alias)
         else:
             raise ValueError(
@@ -118,37 +72,22 @@ def load_recommender(
             )
         if registered.status != "READY" or not registered.run_id:
             raise ValueError("The registered model must be READY and linked to a run.")
+        # Pin the version an alias resolves to now, and download it with this
+        # client: the registry can use a different backend from tracking.
         version = str(registered.version)
-        _require_finished_run(client, registered.run_id)
-        # Resolve with this client before downloading: the registry can use a
-        # different backend from tracking, and an alias may move concurrently.
         download_uri = client.get_model_version_download_uri(name, version)
-        model = _load_artifact(download_uri, client)
-        _check_run_model(model, registered.run_id)
+        model = _load_run_model(client, download_uri, registered.run_id)
         return LoadedRecommender(
-            model,
-            f"models:/{name}/{version}",
-            name,
-            version,
-            registered.run_id,
+            model, f"models:/{name}/{version}", name, version, registered.run_id
         )
     if uri.startswith("runs:/"):
         match = re.fullmatch(r"runs:/([0-9a-fA-F]{32})/model", uri)
         if match is None:
             raise ValueError("Use runs:/<run_id>/model for a logged ALS bundle.")
-        run_id = match.group(1)
         client = MlflowClient(tracking_uri=tracking_uri, registry_uri=registry_uri)
-        _require_finished_run(client, run_id)
-        model = _load_artifact(uri, client)
-        _check_run_model(model, run_id)
-        return LoadedRecommender(model, uri, run_id=run_id)
-    if re.match(r"^[A-Za-z][A-Za-z0-9+.-]*:", uri) and not re.match(
-        r"^[A-Za-z]:[\\/]", uri
-    ):
-        raise ValueError(
-            "Only local paths, runs:/ URIs and models:/ URIs are supported."
-        )
-    directory = Path(source).resolve()
+        model = _load_run_model(client, uri, match.group(1))
+        return LoadedRecommender(model, uri, run_id=match.group(1))
+    directory = Path(uri).resolve()
     model = ImplicitRecommender.load(directory)
     return LoadedRecommender(model, str(directory), run_id=model.metadata.get("run_id"))
 
@@ -174,6 +113,7 @@ def _existing_version(client: MlflowClient, name: str, run_id: str, source: str)
 def _check_recommendations(
     expected: ImplicitRecommender, actual: ImplicitRecommender
 ) -> None:
+    """Check that a reloaded model ranks a few probe profiles like the original."""
     catalog = expected.training_data.tmdb_ids
     profiles = ([catalog[0]], [catalog[-1]], [], [max(catalog) + 1])
     for favorites in profiles:
@@ -203,20 +143,13 @@ def register_model(
     tracking_uri: str | None = None,
     registry_uri: str | None = None,
 ) -> dict:
-    """Register a verified run bundle; move an alias only after loading its version.
-
-    Retrying the same name and run reuses its version. Registering without an
-    alias creates a candidate and leaves existing aliases in place.
-    """
-    _check_run_id(run_id)
-    _check_name(name)
-    _check_alias(alias)
+    """Register a run's bundle, verify the registered copy, then move the alias."""
     client = MlflowClient(tracking_uri=tracking_uri, registry_uri=registry_uri)
     source = f"runs:/{run_id}/model"
+    # Loading the runs:/ URI first also validates run_id before the search
+    # filter below interpolates it.
     original = load_recommender(
-        source,
-        tracking_uri=tracking_uri,
-        registry_uri=registry_uri,
+        source, tracking_uri=tracking_uri, registry_uri=registry_uri
     )
     try:
         client.create_registered_model(
@@ -226,6 +159,7 @@ def register_model(
     except MlflowException as exception:
         if exception.error_code != "RESOURCE_ALREADY_EXISTS":
             raise
+    # A retry reuses the version already created for this run.
     registered = _existing_version(client, name, run_id, source)
     if registered is None:
         registered = client.create_model_version(
@@ -238,9 +172,7 @@ def register_model(
         )
     model_uri = f"models:/{name}/{registered.version}"
     recovered = load_recommender(
-        model_uri,
-        tracking_uri=tracking_uri,
-        registry_uri=registry_uri,
+        model_uri, tracking_uri=tracking_uri, registry_uri=registry_uri
     )
     _check_recommendations(original.model, recovered.model)
     client.set_model_version_tag(

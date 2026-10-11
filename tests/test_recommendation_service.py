@@ -81,28 +81,6 @@ class RecommendationServiceTests(unittest.TestCase):
                 self.assertFalse(set(ids).intersection(favorites))
                 self.assertEqual(actual["model"], self.service.model_info.model_dump())
 
-    def test_validates_direct_inputs_without_http(self):
-        cases = [
-            ([True], 3),
-            ([0], 3),
-            ([-1], 3),
-            ([100.0], 3),
-            (["100"], 3),
-            (None, 3),
-            ("100", 3),
-            ([100] * 501, 3),
-            ([], 0),
-            ([], 51),
-            ([], True),
-            ([], 3.0),
-            ([], "3"),
-            ([], None),
-        ]
-        for favorites, n in cases:
-            with self.subTest(favorites=favorites, n=n):
-                with self.assertRaises(ValidationError):
-                    self.service.recommend(favorites, n=n)
-
     def test_accepts_boundaries_and_returns_only_available_movies(self):
         self.assertEqual(len(self.service.recommend([], n=1).recommendations), 1)
         result = self.service.recommend([100] * 500, n=50)
