@@ -7,11 +7,11 @@ DVC gère les données et les modèles ; MLflow suit les entraînements et leurs
 
 ## Installation
 
-Python 3.12 est requis. Commandes pour Windows (**cmd**), depuis la racine du dépôt :
+Python 3.12 est requis. Depuis la racine du dépôt :
 
-```bat
-py -3.12 -m venv .venv
-.venv\Scripts\activate
+```bash
+python3.12 -m venv .venv
+source .venv/bin/activate
 python -m pip install -r requirements.txt
 ```
 
@@ -20,7 +20,7 @@ python -m pip install -r requirements.txt
 Le stockage DVC est sur S3 et nécessite un accès AWS autorisé.
 Avec AWS CLI 2.32 ou plus récent, configurer le profil puis récupérer les fichiers :
 
-```bat
+```bash
 aws configure set region eu-north-1 --profile movies-and-me
 aws login --profile movies-and-me
 dvc remote modify --local cloud profile movies-and-me
@@ -32,8 +32,8 @@ sous `data/raw/` et le modèle sous `artifacts/dvc/model/`.
 
 ## Lancer l'API
 
-```bat
-set "MODEL_URI=artifacts/dvc/model"
+```bash
+export MODEL_URI="artifacts/dvc/model"
 python -m uvicorn src.api.main:app --host 127.0.0.1 --port 8000 --workers 1
 ```
 
@@ -45,10 +45,12 @@ Documentation interactive : <http://127.0.0.1:8000/docs>.
 | `GET /model/info` | Identifier le modèle chargé |
 | `POST /recommendations` | Obtenir des recommandations |
 
-Exemple depuis un autre terminal cmd :
+Exemple depuis un autre terminal :
 
-```bat
-curl -X POST http://127.0.0.1:8000/recommendations -H "Content-Type: application/json" -d "{\"favorite_movie_ids\":[27205,157336,155,603],\"n\":10}"
+```bash
+curl -X POST http://127.0.0.1:8000/recommendations \
+  -H "Content-Type: application/json" \
+  -d '{"favorite_movie_ids":[27205,157336,155,603],"n":10}'
 ```
 
 `favorite_movie_ids` accepte jusqu'à 500 IDs TMDB positifs. `n` vaut 10 par défaut,
@@ -59,9 +61,9 @@ la popularité. Les scores servent au classement, ce ne sont pas des probabilit�
 
 ## Docker
 
-Avec Docker Desktop en mode Linux et le modèle DVC déjà récupéré :
+Avec Docker et le modèle DVC déjà récupéré :
 
-```bat
+```bash
 docker compose up --build -d --wait
 python scripts/check_api.py --favorite-id 27205
 ```
@@ -74,7 +76,7 @@ Le modèle est monté depuis `artifacts/dvc/model/`.
 
 Modifier [params.yaml](params.yaml), puis exécuter le pipeline :
 
-```bat
+```bash
 dvc repro
 dvc metrics show
 ```
@@ -90,7 +92,7 @@ Pour partager les nouvelles sorties, exécuter `dvc push -r cloud` et commiter
 
 Les entraînements sont suivis dans `mlruns.db`. Ouvrir l'interface :
 
-```bat
+```bash
 python -m mlflow server --backend-store-uri sqlite:///mlruns.db --host 127.0.0.1 --port 5000 --workers 1
 ```
 
@@ -102,19 +104,19 @@ permet de créer ses propres runs même si le pipeline est déjà à jour.
 Pour enregistrer le modèle, remplacer `RUN_ID` par `selection.selected_run_id`
 de `reports/dvc/comparison.json`, puis lancer dans un autre terminal avec `.venv` activé :
 
-```bat
-set "MLFLOW_TRACKING_URI=sqlite:///mlruns.db"
+```bash
+export MLFLOW_TRACKING_URI="sqlite:///mlruns.db"
 python -m src.models.registry register --run-id RUN_ID --name movies-and-me-als --alias champion
 ```
 
 Cette commande associe l'alias `champion` à la version enregistrée.
 Pour la servir avec Uvicorn, exécuter
-`set "MODEL_URI=models:/movies-and-me-als@champion"`, puis relancer l'API
+`export MODEL_URI="models:/movies-and-me-als@champion"`, puis relancer l'API
 dans le même terminal.
 
 ## Tests
 
-```bat
+```bash
 python -m unittest discover -s tests -v
 ```
 
