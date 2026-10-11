@@ -13,3 +13,5 @@ scipy==1.18.1
 threadpoolctl==3.7.0
 # Experiment tracking and local model artifacts.
 mlflow==3.17.0
+# Data versioning and reproducible pipelines.
+dvc==3.67.1
