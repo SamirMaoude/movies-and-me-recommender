@@ -408,19 +408,17 @@ requests vers `main`, les pushes sur `main`, `chore/docker` et
 `ci/github-actions`, ou manuellement. Il comporte deux jobs sous Ubuntu
 avec Python 3.12 :
 
-1. Installation et contrôle des dépendances, vérifications Ruff et tests unitaires.
+1. Installation et contrôle des dépendances, vérification du code et tests unitaires.
 2. Entraînement du modèle synthétique, construction de l'image Docker et test HTTP de l'API.
 
 Le second job attend que le premier passe. Le conteneur de test est supprimé
 à la fin, y compris en cas d'échec. Les actions GitHub utilisent des commits
 précis, avec un accès en lecture au dépôt. Le workflow ne publie pas d'image.
 
-Pour reproduire les contrôles Python dans un environnement dédié :
+Pour installer les dépendances de la CI et lancer les tests :
 
 ```bat
 python -m pip install -r requirements-ci.txt
 python -m pip check
-python -m ruff check src tests scripts --select E9,F63,F7,F82
-python -m ruff format --check scripts
 python -m unittest discover -s tests -v
 ```
