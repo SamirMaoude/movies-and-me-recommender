@@ -5,7 +5,7 @@ le modèle ALS fourni par `implicit` pour se concentrer sur le MLOps :
 entraînement reproductible, évaluation, déploiement et suivi en production.
 L'API reçoit les favoris et renvoie des recommandations avec des IDs TMDB.
 
-La [feuille de route](ROADMAP.md) décrit cette direction. Les phases 1 à 8
+Les phases 1 à 8
 sont réalisées : ALS est entraîné, comparé aux références et rechargeable
 à partir de ses fichiers ou d'une version du registre MLflow. Chaque essai
 conserve les informations sur le code, les données et l'environnement.
