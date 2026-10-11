@@ -6,7 +6,7 @@ import sys
 
 import pandas as pd
 
-# Support the same command from Windows and GitHub Actions.
+# Make src importable when this file is run directly.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.models.collaborative import ALSConfig, ImplicitRecommender

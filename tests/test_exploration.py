@@ -1,4 +1,4 @@
-"""Regression tests for the phase-one MovieLens exploration helpers."""
+"""Tests for loading MovieLens tables and calculating dataset summaries."""
 
 from pathlib import Path
 import tempfile

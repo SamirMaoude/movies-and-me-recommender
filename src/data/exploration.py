@@ -1,4 +1,4 @@
-"""Small, reusable helpers for the MovieLens phase 1 notebook."""
+"""Load MovieLens tables and summarize ratings, genres and TMDB coverage."""
 
 from pathlib import Path
 
@@ -28,10 +28,9 @@ TABLE_KEYS = {
 
 
 def load_movielens(data_dir: str | Path) -> dict[str, pd.DataFrame]:
-    """Load all four CSVs, preserving IMDb zeros and nullable integer TMDB IDs.
+    """Load the four CSVs, keeping leading IMDb zeros and missing TMDB IDs.
 
-    Missing files or schema mismatches fail explicitly. Raw files are never
-    modified; the notebook reports anomalies before any future preprocessing.
+    Raise an error if a file is missing or its columns differ from the schema.
     """
     data_dir = Path(data_dir)
     missing = [f"{name}.csv" for name in SCHEMAS if not (data_dir / f"{name}.csv").is_file()]
@@ -97,7 +96,7 @@ def genre_counts(movies: pd.DataFrame) -> pd.Series:
 
 
 def summarize_dataset(tables: dict[str, pd.DataFrame]) -> dict[str, int | float]:
-    """Return the roadmap summary with full-catalog denominators and a safe join.
+    """Summarize ratings and TMDB coverage across the full movie catalog.
 
     TMDB coverage means an ID is present in links.csv, not that its current
     existence or correctness has been verified against the TMDB service.
