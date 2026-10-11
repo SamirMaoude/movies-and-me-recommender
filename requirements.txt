@@ -11,3 +11,5 @@ implicit==0.7.3
 numpy==2.5.3
 scipy==1.18.1
 threadpoolctl==3.7.0
+# Experiment tracking and local model artifacts.
+mlflow==3.17.0

@@ -7,8 +7,10 @@ L'API utilisera des identifiants TMDB.
 
 La [feuille de route](ROADMAP.md) décrit cette direction. Les phases 1 à 5
 sont réalisées : ALS est entraîné, comparé aux références et rechargeable
-à partir de ses fichiers. La prochaine étape est le suivi des expériences
-avec MLflow. Le modèle par genres reste disponible pour les comparaisons.
+à partir de ses fichiers. La phase 6 est en cours : MLflow conserve les essais,
+leurs modèles et les informations sur le code, les données et l'environnement.
+Le registre de modèles reste à intégrer. Le modèle par genres reste disponible
+pour les comparaisons.
 
 ## Phase 1 : exploration de MovieLens
 
@@ -462,8 +464,72 @@ Le réentraînement sur apprentissage et validation, suivi de la mesure finale
 sur le test, reste à faire une fois les choix figés.
 
 Les tests sont dans [tests/test_collaborative.py](tests/test_collaborative.py)
-et [tests/test_training.py](tests/test_training.py). La suite du projet est
-la **phase 6 : enregistrer les expériences et les modèles dans MLflow**.
+et [tests/test_training.py](tests/test_training.py). Le suivi des essais est
+décrit ci-dessous.
+
+## Phase 6 : suivi et traçabilité avec MLflow
+
+Chaque configuration ALS produit un run dans l'expérience
+`movies-and-me-recommender`. Il contient les paramètres, les métriques de
+validation, la durée d'entraînement, l'évaluation détaillée et les quatre
+fichiers nécessaires pour recharger ce modèle.
+
+Depuis la racine du dépôt, dans **cmd**, avec `.venv` activé :
+
+```bat
+set "MLFLOW_TRACKING_URI=sqlite:///mlruns.db"
+python -m src.training.train --artifact-dir artifacts/implicit-als-mlflow-03 --output reports/als_comparison-mlflow-03.json
+```
+
+La variable vaut pour ce terminal et les commandes qu'il lance. La base
+`mlruns.db` est créée dans le dossier courant. Le dossier du modèle doit
+être nouveau : changer le suffixe `03` s'il existe déjà. Les fichiers locaux
+de MLflow et `artifacts/` sont ignorés par Git.
+
+Pour consulter les résultats, ouvrir un autre terminal dans le même dossier,
+activer `.venv`, puis lancer :
+
+```bat
+python -m mlflow server --backend-store-uri sqlite:///mlruns.db --host 127.0.0.1 --port 5000 --workers 1
+```
+
+L'interface est accessible à <http://127.0.0.1:5000>. `--workers 1` évite le
+problème de lancement de plusieurs processus rencontré sous Windows.
+
+Les fichiers de chaque run se présentent ainsi :
+
+```text
+evaluation.json
+provenance.json
+model/
+    model.npz
+    interactions.npz
+    catalog.json
+    manifest.json
+```
+
+Le run de l'essai ALS sélectionné contient aussi `comparison.json`, le rapport
+final avec les trois configurations et les deux références. Chaque essai du
+rapport a son `run_id` ; `selection.selected_run_id` identifie le run retenu.
+Le manifeste du modèle conserve également son `run_id` et sa provenance.
+
+`provenance.json` enregistre le commit Git, la présence de modifications
+locales (`dirty`), les empreintes SHA-256 de `ratings.csv`, `links.csv` et
+`movies.csv`, ainsi que les versions de Python et des dépendances, dont
+MLflow. Les tags `git.commit` et `git.dirty` rendent les informations Git
+visibles dans l'interface. Les dates de séparation et le seuil positif sont
+enregistrés parmi les paramètres et dans les métadonnées du modèle.
+
+Si `dirty` vaut `true`, le commit seul ne permet pas de retrouver tout le code
+exécuté : les modifications locales ne sont pas archivées par ce suivi.
+Avec les mêmes données, paramètres et environnement, les scores et les
+classements peuvent être comparés entre exécutions ; les identifiants des runs
+et les durées d'entraînement varient. Le modèle reste entraîné sur
+l'apprentissage uniquement, et le test final reste à l'écart.
+
+La phase 6 reste en cours. Les prochaines étapes sont l'enregistrement d'une
+version dans le Model Registry avec un alias `champion`, puis un chargement
+commun qui récupère cette version et vérifie ses recommandations.
 
 ## Reproduire l'analyse
 

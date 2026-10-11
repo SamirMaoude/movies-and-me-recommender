@@ -1,10 +1,19 @@
 """Small end-to-end ALS experiments, selection rules and held-out data guards."""
 
+import hashlib
 import json
 import math
+import os
 from pathlib import Path
+import subprocess
 import tempfile
 import unittest
+
+import mlflow
+from mlflow.exceptions import MlflowException
+from mlflow.store.tracking.sqlalchemy_store import SqlAlchemyStore
+from mlflow.tracking import MlflowClient
+import mlflow.tracking.fluent as fluent
 
 from src.models.collaborative import ImplicitRecommender
 from src.training.train import load_experiment_config, run_experiment, select_trial
@@ -12,6 +21,16 @@ from src.training.train import load_experiment_config, run_experiment, select_tr
 
 def trial_result(name, ndcg, recall):
     return {"name": name, "evaluation": {"metrics": {"ndcg_at_10": ndcg, "recall_at_10": recall}}}
+
+
+def reproducible_report(report):
+    """Keep every result except identities and timings unique to an execution."""
+    normalized = json.loads(json.dumps(report))
+    normalized["selection"].pop("selected_run_id")
+    for trial in normalized["trials"]:
+        trial.pop("run_id")
+        trial.pop("training_seconds")
+    return normalized
 
 
 class TrialSelectionTests(unittest.TestCase):
@@ -41,6 +60,20 @@ class TrainingExperimentTests(unittest.TestCase):
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
         self.directory = Path(directory.name)
+        self.previous_tracking_uri = mlflow.get_tracking_uri()
+        self.previous_experiment_id = fluent._active_experiment_id
+        self.previous_experiment_environment = {
+            name: os.environ.get(name)
+            for name in ("MLFLOW_EXPERIMENT_ID", "MLFLOW_EXPERIMENT_NAME")
+        }
+        self.tracking_uri = f"sqlite:///{(self.directory / 'tracking.db').as_posix()}"
+        self.artifact_root = self.directory / "mlflow-artifacts"
+        self.addCleanup(self.restore_mlflow)
+        mlflow.set_tracking_uri(self.tracking_uri)
+        self.client = MlflowClient(tracking_uri=self.tracking_uri)
+        self.experiment_id = self.client.create_experiment(
+            "movies-and-me-recommender", artifact_location=self.artifact_root.as_uri()
+        )
         self.data_dir = self.directory / "raw"
         self.data_dir.mkdir()
         self.evaluation_path = self.directory / "evaluation.json"
@@ -84,6 +117,22 @@ class TrainingExperimentTests(unittest.TestCase):
         self.evaluation_path.write_text(json.dumps(self.evaluation), encoding="utf-8")
         self.als_path.write_text(json.dumps(self.experiments), encoding="utf-8")
 
+    def restore_mlflow(self):
+        if mlflow.active_run() is not None:
+            mlflow.end_run(status="KILLED")
+        mlflow.set_tracking_uri(self.previous_tracking_uri)
+        fluent._active_experiment_id = self.previous_experiment_id
+        for name, value in self.previous_experiment_environment.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
+        # Cached SQLite connections hold the database open on Windows.
+        with SqlAlchemyStore._engine_map_lock:
+            engine = SqlAlchemyStore._engine_map.pop(self.tracking_uri, None)
+        if engine is not None:
+            engine.dispose()
+
     def run_experiment(self, artifact_dir=None):
         return run_experiment(self.data_dir, self.evaluation_path, self.als_path, artifact_dir)
 
@@ -118,7 +167,13 @@ class TrainingExperimentTests(unittest.TestCase):
 
     def test_repeating_the_same_experiment_reproduces_scores_and_selection(self):
         first = self.run_experiment()
-        self.assertEqual(self.run_experiment(), first)
+        second = self.run_experiment()
+        self.assertEqual(reproducible_report(second), reproducible_report(first))
+        self.assertTrue(
+            {trial["run_id"] for trial in first["trials"]}.isdisjoint(
+                trial["run_id"] for trial in second["trials"]
+            )
+        )
 
     def test_future_test_ratings_cannot_change_candidates_profiles_scores_or_selection(self):
         first = self.run_experiment()
@@ -128,9 +183,134 @@ class TrainingExperimentTests(unittest.TestCase):
 
         second = self.run_experiment()
 
+        stable_first = reproducible_report(first)
+        stable_second = reproducible_report(second)
         for field in ("models", "trials", "selection", "coverage", "training_matrix"):
-            self.assertEqual(second[field], first[field], field)
+            self.assertEqual(stable_second[field], stable_first[field], field)
         self.assertNotEqual(second["sources"]["ratings.csv"], first["sources"]["ratings.csv"])
+
+    def test_mlflow_runs_link_provenance_models_scores_and_the_selected_report(self):
+        candidate = self.directory / "candidate"
+        report = self.run_experiment(candidate)
+        selected = select_trial(report["trials"])
+        selected_run_id = selected["run_id"]
+        self.assertEqual(report["selection"]["selected_run_id"], selected_run_id)
+        self.assertIsNone(mlflow.active_run())
+        runs = self.client.search_runs([self.experiment_id])
+        self.assertEqual(len(runs), len(self.experiments["trials"]))
+        self.assertEqual(
+            {run.info.run_id for run in runs},
+            {trial["run_id"] for trial in report["trials"]},
+        )
+        expected_commit = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=Path(__file__).resolve().parents[1], text=True
+        ).strip()
+        self.assertEqual(report["git"]["commit"], expected_commit)
+        self.assertIsInstance(report["git"]["dirty"], bool)
+        self.assertEqual(report["environment"]["mlflow"], mlflow.__version__)
+        for name in ("ratings.csv", "links.csv", "movies.csv"):
+            self.assertEqual(
+                report["sources"][name]["sha256"],
+                hashlib.sha256((self.data_dir / name).read_bytes()).hexdigest(),
+            )
+
+        provenance = {
+            name: report[name] for name in ("git", "sources", "environment")
+        }
+        local_model = ImplicitRecommender.load(candidate)
+        self.assertEqual(local_model.metadata["run_id"], selected_run_id)
+        for name, value in provenance.items():
+            self.assertEqual(local_model.metadata[name], value)
+
+        for trial in report["trials"]:
+            with self.subTest(trial=trial["name"]):
+                run_id = trial["run_id"]
+                run = self.client.get_run(run_id)
+                self.assertEqual(run.info.status, "FINISHED")
+                self.assertEqual(run.data.tags["mlflow.runName"], trial["name"])
+                self.assertEqual(run.data.tags["git.commit"], expected_commit)
+                self.assertEqual(
+                    run.data.tags["git.dirty"], str(report["git"]["dirty"]).lower()
+                )
+                expected_params = {**trial["config"], **self.evaluation, "k": 10}
+                for name, value in expected_params.items():
+                    self.assertEqual(run.data.params[name], str(value))
+                self.assertGreaterEqual(trial["training_seconds"], 0)
+                self.assertTrue(math.isfinite(trial["training_seconds"]))
+                self.assertEqual(
+                    run.data.metrics["training_seconds"], trial["training_seconds"]
+                )
+                for name, value in trial["evaluation"]["metrics"].items():
+                    self.assertEqual(run.data.metrics[f"validation_{name}"], value)
+                self.assertEqual(run.data.metrics["validation_users"], 2)
+
+                artifact_names = {
+                    item.path for item in self.client.list_artifacts(run_id)
+                }
+                self.assertTrue(
+                    {"evaluation.json", "provenance.json", "model"} <= artifact_names
+                )
+                self.assertEqual(
+                    "comparison.json" in artifact_names, run_id == selected_run_id
+                )
+                destination = self.directory / f"download-{run_id}"
+                destination.mkdir()
+                download = lambda path: Path(self.client.download_artifacts(
+                    run_id, path, str(destination)
+                ))
+                stored_provenance = json.loads(download("provenance.json").read_text())
+                for name, value in provenance.items():
+                    self.assertEqual(stored_provenance[name], value)
+                self.assertEqual(
+                    json.loads(download("evaluation.json").read_text()),
+                    trial["evaluation"],
+                )
+                model_path = download("model")
+                self.assertEqual(
+                    {path.name for path in model_path.iterdir()},
+                    {"model.npz", "interactions.npz", "catalog.json", "manifest.json"},
+                )
+                recovered = ImplicitRecommender.load(model_path)
+                self.assertEqual(recovered.metadata["run_id"], run_id)
+                self.assertEqual(recovered.metadata["trial"], trial["name"])
+                self.assertEqual(recovered.metadata["fit_split"], "train")
+                self.assertEqual(recovered.metadata["evaluation_config"], self.evaluation)
+                self.assertEqual(
+                    recovered.metadata["validation_metrics"], trial["evaluation"]["metrics"]
+                )
+                for name, value in provenance.items():
+                    self.assertEqual(recovered.metadata[name], value)
+                for row, favorites in zip(
+                    trial["evaluation"]["per_user"], ([100], [200])
+                ):
+                    self.assertEqual(
+                        [item["tmdb_id"] for item in recovered.recommend(favorites)],
+                        row["recommended_tmdb_ids"],
+                    )
+                if run_id == selected_run_id:
+                    self.assertEqual(
+                        json.loads(download("comparison.json").read_text()), report
+                    )
+                    for favorites in ([100], [200], [], [999]):
+                        local = local_model.recommend(favorites)
+                        restored = recovered.recommend(favorites)
+                        self.assertEqual(
+                            [item["tmdb_id"] for item in restored],
+                            [item["tmdb_id"] for item in local],
+                        )
+                        for actual, expected in zip(restored, local):
+                            self.assertAlmostEqual(actual["score"], expected["score"], places=6)
+
+    def test_artifact_logging_failure_marks_the_run_failed_and_saves_no_candidate(self):
+        self.artifact_root.write_text("This file prevents creating artifact directories.")
+        candidate = self.directory / "candidate"
+        with self.assertRaises((OSError, MlflowException)):
+            self.run_experiment(candidate)
+        self.assertFalse(candidate.exists())
+        self.assertIsNone(mlflow.active_run())
+        runs = self.client.search_runs([self.experiment_id])
+        self.assertEqual(len(runs), 1)
+        self.assertEqual(runs[0].info.status, "FAILED")
 
     def test_existing_artifact_is_preserved_and_no_training_is_attempted(self):
         artifact = self.directory / "candidate"
