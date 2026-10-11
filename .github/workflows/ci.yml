@@ -12,7 +12,8 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  # Never interrupt a run on main while it may be publishing an image.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   PYTHONUNBUFFERED: "1"
@@ -88,4 +89,137 @@ jobs:
           if docker inspect movies-me-api-ci > /dev/null 2>&1; then
             docker logs movies-me-api-ci || true
             docker rm --force movies-me-api-ci
+          fi
+
+  publish:
+    name: Publish the API image with the DVC model
+    needs: [tests, docker]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment:
+      name: ghcr
+      url: https://github.com/users/SamirMaoude/packages/container/package/movies-and-me-recommender
+    permissions:
+      contents: read
+      id-token: write
+      packages: write
+    env:
+      IMAGE: ghcr.io/samirmaoude/movies-and-me-recommender:${{ github.sha }}
+      DVC_NO_ANALYTICS: "1"
+    outputs:
+      image: ${{ steps.push.outputs.image }}
+      run-id: ${{ steps.model.outputs.run-id }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-dvc.txt
+      - name: Install DVC
+        run: python -m pip install -r requirements-dvc.txt
+      - name: Get read access to the DVC remote
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: eu-north-1
+          mask-aws-account-id: true
+      - name: Pull the model
+        run: dvc pull artifacts/dvc/model -r cloud
+      - name: Read the model run ID
+        id: model
+        run: |
+          run_id=$(python -c "import json; print(json.load(open('artifacts/dvc/model/manifest.json'))['metadata']['run_id'])")
+          echo "run-id=$run_id" >> "$GITHUB_OUTPUT"
+      - name: Build the image
+        run: |
+          docker build --pull --target deployment \
+            --build-context model=artifacts/dvc/model \
+            --build-arg "VCS_REF=$GITHUB_SHA" \
+            --tag "$IMAGE" .
+      - name: Start the API
+        run: |
+          docker run --detach --name movies-me-api \
+            --publish 127.0.0.1:8000:8000 \
+            --read-only --tmpfs /tmp:rw,noexec,nosuid,size=64m \
+            --cap-drop ALL --security-opt no-new-privileges \
+            "$IMAGE"
+      - name: Check recommendations and the model run
+        env:
+          RUN_ID: ${{ steps.model.outputs.run-id }}
+        run: |
+          python scripts/check_api.py --url http://127.0.0.1:8000 \
+            --favorite-id 27205 --expected-run-id "$RUN_ID"
+      - name: Show logs and remove the test container
+        if: always()
+        run: |
+          if docker inspect movies-me-api > /dev/null 2>&1; then
+            docker logs movies-me-api || true
+            docker rm --force movies-me-api
+          fi
+      - name: Push the checked image
+        id: push
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_ID: ${{ steps.model.outputs.run-id }}
+        run: |
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          docker push "$IMAGE"
+          docker logout ghcr.io
+          image=$(docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "$IMAGE" \
+            | grep '^ghcr.io/samirmaoude/movies-and-me-recommender@sha256:')
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Published image"
+            echo
+            echo "- Tag: \`$IMAGE\`"
+            echo "- Digest: \`$image\`"
+            echo "- Model run ID: \`$RUN_ID\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  check-published:
+    name: Check the published image
+    needs: publish
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: read
+    env:
+      IMAGE: ${{ needs.publish.outputs.image }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - name: Pull the image by digest
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          docker pull "$IMAGE"
+          docker logout ghcr.io
+          revision=$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$IMAGE")
+          test "$revision" = "$GITHUB_SHA"
+      - name: Start the published image
+        run: |
+          docker run --detach --name movies-me-api \
+            --publish 127.0.0.1:8000:8000 \
+            --read-only --tmpfs /tmp:rw,noexec,nosuid,size=64m \
+            --cap-drop ALL --security-opt no-new-privileges \
+            "$IMAGE"
+      - name: Check recommendations and the model run
+        env:
+          RUN_ID: ${{ needs.publish.outputs.run-id }}
+        run: |
+          python3 scripts/check_api.py --url http://127.0.0.1:8000 \
+            --favorite-id 27205 --expected-run-id "$RUN_ID"
+      - name: Show logs and remove the test container
+        if: always()
+        run: |
+          if docker inspect movies-me-api > /dev/null 2>&1; then
+            docker logs movies-me-api || true
+            docker rm --force movies-me-api
           fi
