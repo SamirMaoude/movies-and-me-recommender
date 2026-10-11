@@ -1,18 +1,38 @@
-"""Run the evaluation data audit; this command does not rank or score models."""
+"""Audit the evaluation data: preparation counts, splits and validation coverage."""
 
 import argparse
-import hashlib
-import json
 from pathlib import Path
 
 import pandas as pd
 
 from src.data.exploration import load_movielens
 from src.evaluation.data import prepare_interactions, temporal_split, utc_cutoff
+from src.files import read_json, sha256, write_json
+
+
+def load_splits(
+    data_dir: Path, config: dict
+) -> tuple[dict[str, pd.DataFrame], dict[str, int], dict[str, pd.DataFrame]]:
+    """Read the CSV files, prepare the interactions and split them as configured."""
+    tables = load_movielens(data_dir)
+    interactions, preparation = prepare_interactions(
+        tables["ratings"], tables["links"], config["positive_threshold"]
+    )
+    splits = temporal_split(interactions, config["train_end"], config["validation_end"])
+    return tables, preparation, splits
+
+
+def normalized_config(config: dict) -> dict:
+    """Evaluation settings as written in reports, with cutoffs in UTC."""
+    return {
+        "positive_threshold": float(config["positive_threshold"]),
+        "train_end": utc_cutoff(config["train_end"]).isoformat(),
+        "validation_end": utc_cutoff(config["validation_end"]).isoformat(),
+    }
 
 
 def split_summary(interactions: pd.DataFrame) -> dict:
-    """Describe a split, including empty groups, without evaluating predictions."""
+    """Count a split's interactions, users and films, and give its time range."""
     times = pd.to_datetime(interactions["timestamp"], unit="s", utc=True)
     positives = int(interactions["is_positive"].sum())
     return {
@@ -27,11 +47,7 @@ def split_summary(interactions: pd.DataFrame) -> dict:
 
 
 def validation_coverage(train: pd.DataFrame, validation: pd.DataFrame) -> dict:
-    """Describe validation targets relative to positive train interactions.
-
-    This is data coverage, not recommendation quality. Unknown users and films
-    remain in the split and in these counts rather than disappearing silently.
-    """
+    """Count validation targets by whether their user and film are known from train."""
     positive_train = train.loc[train["is_positive"]]
     targets = validation.loc[validation["is_positive"]]
     history_users = set(positive_train["userId"])
@@ -62,26 +78,10 @@ def validation_coverage(train: pd.DataFrame, validation: pd.DataFrame) -> dict:
 
 
 def build_report(data_dir: Path, config_path: Path) -> dict:
-    """Prepare the splits and return a deterministic, JSON-compatible report."""
-    config = json.loads(config_path.read_text(encoding="utf-8"))
-    required = {"positive_threshold", "train_end", "validation_end"}
-    if not isinstance(config, dict) or set(config) != required:
-        raise ValueError(
-            "Evaluation config must contain positive_threshold, train_end and validation_end."
-        )
-    tables = load_movielens(data_dir)
-    interactions, preparation = prepare_interactions(
-        tables["ratings"],
-        tables["links"],
-        config["positive_threshold"],
-    )
-    splits = temporal_split(interactions, config["train_end"], config["validation_end"])
+    config = read_json(config_path)
+    _, preparation, splits = load_splits(data_dir, config)
     return {
-        "config": {
-            "positive_threshold": float(config["positive_threshold"]),
-            "train_end": utc_cutoff(config["train_end"]).isoformat(),
-            "validation_end": utc_cutoff(config["validation_end"]).isoformat(),
-        },
+        "config": normalized_config(config),
         "policies": {
             "positive_feedback": "rating >= positive_threshold",
             "missing_tmdb": "exclude and count",
@@ -93,7 +93,7 @@ def build_report(data_dir: Path, config_path: Path) -> dict:
             "test_usage": "descriptive data counts only; no model evaluation",
         },
         "sources": {
-            name: {"sha256": hashlib.sha256((data_dir / name).read_bytes()).hexdigest()}
+            name: {"sha256": sha256(data_dir / name)}
             for name in ("ratings.csv", "links.csv")
         },
         "preparation": preparation,
@@ -112,11 +112,7 @@ def main() -> None:
         "--output", type=Path, default=Path("reports/evaluation_data.json")
     )
     args = parser.parse_args()
-    report = build_report(args.data_dir, args.config)
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(
-        json.dumps(report, indent=2, allow_nan=False) + "\n", encoding="utf-8"
-    )
+    write_json(args.output, build_report(args.data_dir, args.config))
     print(f"Evaluation data report: {args.output}")
 
 
