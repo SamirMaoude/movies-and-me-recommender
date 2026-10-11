@@ -750,8 +750,8 @@ modèle récupéré produit dix recommandations. `dvc repro` saute les deux
 clone, les états Git et DVC sont propres.
 
 L'exécution sur une autre machine et dans la CI n'a pas encore été testée.
-La connexion AWS de la CI sera traitée en phase 9. La prochaine étape est
-l'intégration de `feat/dvc-pipeline` dans `main`, puis l'API FastAPI.
+La connexion AWS de la CI sera traitée en phase 9. La phase 7 est intégrée
+dans `main`. La prochaine étape est l'API FastAPI.
 
 ## Reproduire l'analyse
 
