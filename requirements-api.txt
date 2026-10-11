@@ -1,0 +1,11 @@
+# Python 3.12, CPU inference from a local ALS bundle.
+implicit==0.7.3
+numpy==2.5.3
+pandas==3.0.6
+scipy==1.18.1
+threadpoolctl==3.7.0
+# Registry client only; the MLflow server and training tools stay outside the image.
+mlflow-skinny==3.17.0
+fastapi==0.143.0
+uvicorn==0.54.0
+pydantic==2.14.0

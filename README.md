@@ -879,6 +879,79 @@ sans CSV et sans accès à un suivi ou un registre MLflow. Les sorties DVC
 ont été recalculées pour les nouvelles dépendances, avec les mêmes
 métriques, puis envoyées vers S3. La version `champion` est conservée.
 
+## Phase 9 : Docker
+
+Le `Dockerfile` construit une image CPU avec Python 3.12. L'API utilise
+`requirements-api.txt`, qui contient ses dépendances et le client léger
+MLflow. L'environnement complet des notebooks et de l'entraînement reste
+défini dans `requirements.txt`.
+
+L'image contient le code de l'API. Le modèle est fourni au démarrage dans
+un dossier monté en lecture seule. Les CSV, la base MLflow, les notebooks,
+le cache DVC et les identifiants AWS sont exclus du contexte de construction.
+Uvicorn utilise un seul worker et le service s'exécute avec un utilisateur
+sans droits administrateur.
+
+### Lancer avec le modèle DVC
+
+Ouvrir Docker Desktop avec le moteur Linux. Depuis la racine du dépôt,
+dans **cmd** ou PowerShell :
+
+```bat
+docker version
+dvc pull artifacts/dvc/model -r cloud
+docker compose up --build -d --wait
+docker compose ps
+```
+
+La récupération DVC utilise la connexion AWS du PC. Le conteneur charge
+ensuite les quatre fichiers de `artifacts/dvc/model`, avec
+`MODEL_URI=/models/als`. Ce dossier doit déjà exister : Compose refuse de
+créer un répertoire vide à sa place. L'API fonctionne ensuite à partir
+du modèle chargé en mémoire.
+
+La documentation est disponible sur <http://127.0.0.1:8000/docs>.
+Le port est exposé uniquement sur le PC local. Le contrôle `/health`
+confirme que le modèle est prêt.
+
+Dans l'environnement Python du projet, vérifier les routes et une requête
+avec un film du catalogue :
+
+```bat
+python scripts/check_api.py --favorite-id 27205
+```
+
+Le script vérifie l'identité du modèle, les recommandations ALS, l'exclusion
+des favoris, le recours à la popularité et les erreurs 422. Le modèle local
+conserve son `run_id` ; les champs de registre `name` et `version` sont à
+`null`, comme pour le chargement local décrit en phase 8.
+
+Pour consulter les logs et arrêter le service :
+
+```bat
+docker compose logs api
+docker compose down
+```
+
+### Vérifier avec un petit modèle synthétique
+
+Le script suivant entraîne un modèle de six films dans un nouveau dossier.
+Il sert aux vérifications du conteneur et de la CI :
+
+```bat
+python scripts/create_smoke_model.py --output artifacts/smoke-model
+```
+
+Le dossier de sortie doit être nouveau. Les IDs TMDB synthétiques vont de
+100 à 600 ; `check_api.py` utilise le favori 100 par défaut. Le modèle réel
+DVC reste dans son propre dossier.
+
+La construction et le démarrage avec Compose ont été vérifiés sous Docker
+Desktop Linux sur Windows. Avec le modèle DVC, dix recommandations
+correspondent au calcul direct sous Windows. Les routes HTTP, la solution
+de secours, les erreurs 422 et `/docs` répondent correctement. Le modèle et
+le système de fichiers du conteneur sont en lecture seule.
+
 ## Reproduire l'analyse
 
 Depuis la racine du dépôt, avec **Python 3.12**, sous PowerShell :
