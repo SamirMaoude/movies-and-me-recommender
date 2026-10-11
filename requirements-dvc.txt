@@ -1,0 +1,2 @@
+# DVC client used by CI to fetch the model from the S3 remote.
+dvc[s3]==3.67.1
