@@ -1,102 +1,65 @@
-"""Train ALS candidates on train, compare on validation and save the best ALS."""
+"""Fit the ALS trials on train, compare them on validation and save the best."""
 
 import argparse
-import hashlib
 import json
 import platform
 import subprocess
 from dataclasses import asdict
 from importlib.metadata import version
-from math import isfinite
-from numbers import Real
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from time import perf_counter
 
 import mlflow
 
-from src.data.exploration import load_movielens
 from src.evaluation.compare import (
     build_validation_cases,
     compare_models,
     evaluate_recommender,
 )
-from src.evaluation.data import prepare_interactions, temporal_split, utc_cutoff
-from src.evaluation.prepare import split_summary
+from src.evaluation.prepare import load_splits, normalized_config, split_summary
+from src.files import read_json, sha256, write_json
 from src.models.collaborative import ALSConfig, ImplicitRecommender
 
 
-def load_experiment_config(path: Path) -> dict:
-    """Validate the declared trials before loading data or fitting a model."""
-    config = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(config, dict) or set(config) != {"k", "trials"}:
-        raise ValueError("ALS experiments must contain k and trials.")
-    if (
-        isinstance(config["k"], bool)
-        or not isinstance(config["k"], int)
-        or config["k"] <= 0
-    ):
-        raise ValueError("k must be a positive integer.")
-    if not isinstance(config["trials"], list) or not config["trials"]:
-        raise ValueError("Declare at least one ALS trial.")
-    names = set()
-    fields = set(asdict(ALSConfig()))
-    for trial in config["trials"]:
-        if not isinstance(trial, dict) or set(trial) != fields | {"name"}:
-            raise ValueError("Each trial needs a name and all ALSConfig parameters.")
-        name = trial["name"]
-        if not isinstance(name, str) or not name.strip() or name in names:
-            raise ValueError("Trial names must be nonempty and unique.")
-        names.add(name)
-        ALSConfig(**{key: value for key, value in trial.items() if key != "name"})
-    return config
-
-
 def _selection_score(metrics: dict, k: int) -> tuple[float, float]:
-    values = (metrics[f"ndcg_at_{k}"], metrics[f"recall_at_{k}"])
-    if any(
-        isinstance(value, bool) or not isinstance(value, Real) or not isfinite(value)
-        for value in values
-    ):
-        raise ValueError(
-            "Selection requires finite validation metrics on an eligible cohort."
-        )
-    return tuple(float(value) for value in values)
+    return metrics[f"ndcg_at_{k}"], metrics[f"recall_at_{k}"]
 
 
 def select_trial(trials: list[dict], k: int = 10) -> dict:
-    """Prefer NDCG, then Recall; retain the first declared trial on exact ties."""
-    if not trials:
-        raise ValueError("No ALS trial to select.")
+    """Prefer NDCG, then Recall; the first declared trial wins exact ties."""
     return max(
         trials, key=lambda trial: _selection_score(trial["evaluation"]["metrics"], k)
     )
 
 
 def _collect_provenance(data_dir: Path) -> dict:
-    """Identify the input files, environment and Git state before training."""
+    """Record the Git state, the input checksums and the package versions."""
     repo_dir = Path(__file__).resolve().parents[2]
     commit = subprocess.check_output(
-        ["git", "rev-parse", "HEAD"], cwd=repo_dir, text=True, encoding="utf-8",
+        ["git", "rev-parse", "HEAD"], cwd=repo_dir, text=True, encoding="utf-8"
     ).strip()
     status = subprocess.check_output(
-        ["git", "status", "--porcelain"], cwd=repo_dir, text=True, encoding="utf-8",
+        ["git", "status", "--porcelain"], cwd=repo_dir, text=True, encoding="utf-8"
+    )
+    packages = (
+        "implicit",
+        "numpy",
+        "scipy",
+        "pandas",
+        "scikit-learn",
+        "threadpoolctl",
+        "mlflow",
     )
     return {
         "git": {"commit": commit, "dirty": bool(status.strip())},
         "sources": {
-            name: {"sha256": hashlib.sha256((data_dir / name).read_bytes()).hexdigest()}
+            name: {"sha256": sha256(data_dir / name)}
             for name in ("ratings.csv", "links.csv", "movies.csv")
         },
         "environment": {
             "python": platform.python_version(),
-            **{
-                package: version(package)
-                for package in (
-                    "implicit", "numpy", "scipy", "pandas", "scikit-learn",
-                    "threadpoolctl", "mlflow",
-                )
-            },
+            **{package: version(package) for package in packages},
         },
     }
 
@@ -107,153 +70,95 @@ def run_experiment(
     experiment_config_path: Path,
     artifact_dir: Path | None = None,
 ) -> dict:
-    """Fit each declared ALS once and preserve the chosen train-only candidate.
-
-    Validation selects parameters, never supplies favorites or model weights.
-    The saved ALS remains fitted on train so its scores can be reproduced.
-    Final refitting and test evaluation belong to a later, frozen selection.
-    """
+    """Fit each ALS trial on train, select one on validation and save it."""
     if artifact_dir is not None and artifact_dir.exists():
-        raise FileExistsError(
-            f"Artifact directory already exists: {artifact_dir}. Choose a new --artifact-dir."
-        )
-    experiment_config = load_experiment_config(experiment_config_path)
-    evaluation_config = json.loads(evaluation_config_path.read_text(encoding="utf-8"))
-    required = {"positive_threshold", "train_end", "validation_end"}
-    if not isinstance(evaluation_config, dict) or set(evaluation_config) != required:
-        raise ValueError(
-            "Evaluation config must contain positive_threshold, train_end and validation_end."
-        )
+        raise FileExistsError(f"Artifact directory already exists: {artifact_dir}")
+    experiment_config = read_json(experiment_config_path)
+    evaluation_config = read_json(evaluation_config_path)
     provenance = _collect_provenance(data_dir)
-    tables = load_movielens(data_dir)
-    interactions, preparation = prepare_interactions(
-        tables["ratings"],
-        tables["links"],
-        evaluation_config["positive_threshold"],
-    )
-    splits = temporal_split(
-        interactions,
-        evaluation_config["train_end"],
-        evaluation_config["validation_end"],
-    )
+    tables, preparation, splits = load_splits(data_dir, evaluation_config)
     train, validation = splits["train"], splits["validation"]
     candidate_ids, cases = build_validation_cases(train, validation)
     if not cases:
-        raise ValueError(
-            "Cannot select ALS parameters without eligible validation users."
-        )
+        raise ValueError("No eligible validation users to select an ALS trial.")
     k = experiment_config["k"]
     report = compare_models(train, validation, tables["movies"], tables["links"], k)
-    provenance.update({
-        "evaluation_config": evaluation_config,
-        "experiment_config": experiment_config,
-        "preparation": preparation,
-        "splits": {
-            name: split_summary(splits[name]) for name in ("train", "validation")
-        },
-    })
+    provenance.update(
+        {
+            "evaluation_config": evaluation_config,
+            "experiment_config": experiment_config,
+            "preparation": preparation,
+            "splits": {
+                name: split_summary(splits[name]) for name in ("train", "validation")
+            },
+        }
+    )
 
     mlflow.set_experiment("movies-and-me-recommender")
-
     trials, fitted = [], []
-
     for declared in experiment_config["trials"]:
+        name = declared["name"]
         config = ALSConfig(
-            **{key: value for key, value in declared.items() if key != "name"},
+            **{key: value for key, value in declared.items() if key != "name"}
         )
-
-        with mlflow.start_run(run_name=declared["name"]) as run:
+        with mlflow.start_run(run_name=name) as run:
             run_id = run.info.run_id
-            mlflow.set_tags({
-                "git.commit": provenance["git"]["commit"],
-                "git.dirty": str(provenance["git"]["dirty"]).lower(),
-            })
-            mlflow.log_dict(provenance, "provenance.json")
-            mlflow.log_params(
+            mlflow.set_tags(
                 {
-                    **asdict(config),
-                    **evaluation_config,
-                    "k": k,
+                    "git.commit": provenance["git"]["commit"],
+                    "git.dirty": str(provenance["git"]["dirty"]).lower(),
                 }
             )
+            mlflow.log_dict(provenance, "provenance.json")
+            mlflow.log_params({**asdict(config), **evaluation_config, "k": k})
             start = perf_counter()
-
-            recommender = ImplicitRecommender.fit(
-                train,
-                tables["links"],
-                config,
-            )
+            recommender = ImplicitRecommender.fit(train, tables["links"], config)
             training_seconds = perf_counter() - start
-
-            if recommender.training_data.tmdb_ids != candidate_ids:
-                raise ValueError(
-                    "ALS and the baselines must use exactly the same candidate catalog."
-                )
-            evaluation = evaluate_recommender(
-                recommender,
-                cases,
-                candidate_ids,
-                k,
+            evaluation = evaluate_recommender(recommender, cases, candidate_ids, k)
+            mlflow.log_metrics(
+                {
+                    f"validation_{metric}": value
+                    for metric, value in evaluation["metrics"].items()
+                }
             )
-
-            mlflow.log_metrics({
-                f"validation_{name}": value
-                for name, value in evaluation["metrics"].items()
-            })
             mlflow.log_metric("training_seconds", training_seconds)
-            mlflow.log_metric(
-                "validation_users",
-                evaluation["users_evaluated"],
-            )
-
+            mlflow.log_metric("validation_users", evaluation["users_evaluated"])
             mlflow.log_dict(evaluation, "evaluation.json")
-
             with TemporaryDirectory(prefix="als-") as temporary:
                 model_dir = Path(temporary) / "model"
-
                 recommender.save(
                     model_dir,
                     metadata={
                         **provenance,
                         "run_id": run_id,
-                        "trial": declared["name"],
+                        "trial": name,
                         "fit_split": "train",
                         "evaluation_config": evaluation_config,
                         "validation_metrics": evaluation["metrics"],
                     },
                 )
-
-                mlflow.log_artifacts(
-                    str(model_dir),
-                    artifact_path="model",
-                )
-
-            trials.append(
-                {
-                    "name": declared["name"],
-                    "run_id": run_id,
-                    "config": asdict(config),
-                    "evaluation": evaluation,
-                    "training_seconds": training_seconds,
-                }
-            )
-            fitted.append(recommender)
+                mlflow.log_artifacts(str(model_dir), artifact_path="model")
+        trials.append(
+            {
+                "name": name,
+                "run_id": run_id,
+                "config": asdict(config),
+                "evaluation": evaluation,
+                "training_seconds": training_seconds,
+            }
+        )
+        fitted.append(recommender)
 
     selected = select_trial(trials, k)
-    selected_index = next(
-        index for index, trial in enumerate(trials) if trial is selected
-    )
-    recommender = fitted[selected_index]
+    # Keep the train-only fit that produced the validation scores: validation
+    # chooses the trial without training it, and test data stays unused.
+    recommender = fitted[trials.index(selected)]
     report["models"]["als"] = selected["evaluation"]
     validation_winner = max(
         report["models"],
-        key=lambda name: _selection_score(report["models"][name]["metrics"], k),
+        key=lambda model: _selection_score(report["models"][model]["metrics"], k),
     )
-    config = {
-        "positive_threshold": float(evaluation_config["positive_threshold"]),
-        "train_end": utc_cutoff(evaluation_config["train_end"]).isoformat(),
-        "validation_end": utc_cutoff(evaluation_config["validation_end"]).isoformat(),
-    }
+    config = normalized_config(evaluation_config)
     selection = {
         "metric": f"ndcg_at_{k}",
         "tie_breaker": f"recall_at_{k}, then declared trial order",
@@ -286,7 +191,7 @@ def run_experiment(
             "training_matrix": {
                 "users": len(recommender.training_data.user_ids),
                 "movies": len(recommender.training_data.tmdb_ids),
-                "positive_pairs": int(recommender.training_data.matrix.nnz),
+                "positive_pairs": recommender.training_data.matrix.nnz,
                 "values": "binary; rating magnitude is not a weight",
             },
             "trials": trials,
@@ -325,14 +230,10 @@ def main() -> None:
     report = run_experiment(
         args.data_dir, args.evaluation_config, args.config, args.artifact_dir
     )
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(
-        json.dumps(report, indent=2, allow_nan=False) + "\n", encoding="utf-8"
-    )
+    write_json(args.output, report)
     for trial in report["trials"]:
-        print(
-            f"{trial['name']}: {json.dumps(trial['evaluation']['metrics'], allow_nan=False)}"
-        )
+        metrics = json.dumps(trial["evaluation"]["metrics"], allow_nan=False)
+        print(f"{trial['name']}: {metrics}")
     print(f"Selected ALS trial: {report['selection']['selected_trial']}")
     print(f"Selected MLflow run: {report['selection']['selected_run_id']}")
     print(f"Best validation model: {report['selection']['validation_winner']}")

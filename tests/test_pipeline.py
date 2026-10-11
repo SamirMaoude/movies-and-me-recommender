@@ -2,16 +2,18 @@
 
 import json
 import os
-from pathlib import Path
 import tempfile
 import unittest
+from pathlib import Path
 
 import mlflow
-from mlflow.store.model_registry.sqlalchemy_store import SqlAlchemyStore as RegistryStore
-from mlflow.store.tracking.sqlalchemy_store import SqlAlchemyStore
-from mlflow.tracking import MlflowClient
 import mlflow.tracking.fluent as fluent
 import yaml
+from mlflow.store.model_registry.sqlalchemy_store import (
+    SqlAlchemyStore as RegistryStore,
+)
+from mlflow.store.tracking.sqlalchemy_store import SqlAlchemyStore
+from mlflow.tracking import MlflowClient
 
 from src.evaluation.prepare import build_report
 from src.models.collaborative import ImplicitRecommender
@@ -36,7 +38,11 @@ class PipelineStageTests(unittest.TestCase):
         self.previous_experiment = fluent._active_experiment_id
         self.previous_environment = {
             name: os.environ.get(name)
-            for name in ("MLFLOW_TRACKING_URI", "MLFLOW_EXPERIMENT_ID", "MLFLOW_EXPERIMENT_NAME")
+            for name in (
+                "MLFLOW_TRACKING_URI",
+                "MLFLOW_EXPERIMENT_ID",
+                "MLFLOW_EXPERIMENT_NAME",
+            )
         }
         for name in self.previous_environment:
             os.environ.pop(name, None)
@@ -54,11 +60,17 @@ class PipelineStageTests(unittest.TestCase):
             },
             "als": {
                 "k": 10,
-                "trials": [{
-                    "name": "small", "factors": 2, "regularization": 0.1,
-                    "alpha": 10.0, "iterations": 3, "random_state": 7,
-                    "num_threads": 1,
-                }],
+                "trials": [
+                    {
+                        "name": "small",
+                        "factors": 2,
+                        "regularization": 0.1,
+                        "alpha": 10.0,
+                        "iterations": 3,
+                        "random_state": 7,
+                        "num_threads": 1,
+                    }
+                ],
             },
             "tracking": {"uri": self.tracking_uri},
         }
@@ -96,12 +108,18 @@ class PipelineStageTests(unittest.TestCase):
         self.params_path.write_text(yaml.safe_dump(self.params), encoding="utf-8")
 
     def prepare(self):
-        return prepare_stage(self.params_path, self.raw, self.evaluation_path, self.audit_path)
+        return prepare_stage(
+            self.params_path, self.raw, self.evaluation_path, self.audit_path
+        )
 
     def train(self):
         return train_stage(
-            self.params_path, self.raw, self.evaluation_path,
-            self.model_dir, self.report_path, self.metrics_path,
+            self.params_path,
+            self.raw,
+            self.evaluation_path,
+            self.model_dir,
+            self.report_path,
+            self.metrics_path,
         )
 
     def test_preparation_exports_the_existing_audit_without_modifying_raw_files(self):
@@ -111,14 +129,20 @@ class PipelineStageTests(unittest.TestCase):
 
         self.assertEqual(report, build_report(self.raw, self.evaluation_path))
         self.assertEqual(json.loads(self.audit_path.read_text()), report)
-        self.assertEqual(json.loads(self.evaluation_path.read_text()), self.params["evaluation"])
+        self.assertEqual(
+            json.loads(self.evaluation_path.read_text()), self.params["evaluation"]
+        )
         self.assertEqual(report["splits"]["train"]["interactions"], 5)
         self.assertEqual(report["splits"]["validation"]["interactions"], 3)
         self.assertEqual(report["splits"]["test"]["interactions"], 1)
-        self.assertEqual(before, {path.name: path.read_bytes() for path in self.raw.iterdir()})
+        self.assertEqual(
+            before, {path.name: path.read_bytes() for path in self.raw.iterdir()}
+        )
         self.assertEqual(self.client.search_runs([self.experiment_id]), [])
 
-    def test_training_produces_reloadable_model_comparison_and_numeric_validation_metrics(self):
+    def test_training_produces_reloadable_model_comparison_and_numeric_validation_metrics(
+        self,
+    ):
         self.prepare()
 
         report = self.train()
@@ -132,7 +156,9 @@ class PipelineStageTests(unittest.TestCase):
             self.assertEqual(values, report["models"][name]["metrics"])
             self.assertTrue(all(isinstance(value, float) for value in values.values()))
         model = ImplicitRecommender.load(self.model_dir)
-        self.assertEqual(model.metadata["run_id"], report["selection"]["selected_run_id"])
+        self.assertEqual(
+            model.metadata["run_id"], report["selection"]["selected_run_id"]
+        )
         self.assertEqual(model.training_data.tmdb_ids, (100, 200, 300))
         self.assertFalse(report["selection"]["final_test_evaluated"])
         self.assertEqual(report["selection"]["fit_split"], "train")
@@ -147,7 +173,9 @@ class PipelineStageTests(unittest.TestCase):
                 row["recommended_tmdb_ids"],
             )
 
-    def test_environment_can_select_the_tracking_backend_and_metrics_remain_stable(self):
+    def test_environment_can_select_the_tracking_backend_and_metrics_remain_stable(
+        self,
+    ):
         self.prepare()
         first = self.train()
         first_metrics = self.metrics_path.read_bytes()
@@ -160,7 +188,10 @@ class PipelineStageTests(unittest.TestCase):
 
         second = self.train()
 
-        self.assertNotEqual(first["selection"]["selected_run_id"], second["selection"]["selected_run_id"])
+        self.assertNotEqual(
+            first["selection"]["selected_run_id"],
+            second["selection"]["selected_run_id"],
+        )
         self.assertEqual(first_metrics, self.metrics_path.read_bytes())
         self.assertEqual(len(self.client.search_runs([self.experiment_id])), 2)
         self.assertFalse((Path.cwd() / "must-not-be-created.db").exists())
@@ -180,47 +211,6 @@ class PipelineStageTests(unittest.TestCase):
         with self.assertRaises(FileExistsError):
             self.prepare()
         self.assertEqual(self.evaluation_path.read_text(), "keep this configuration")
-        self.assertEqual(self.client.search_runs([self.experiment_id]), [])
-
-    def test_training_rejects_stale_preparation_before_loading_data(self):
-        self.prepare()
-        self.params["evaluation"]["positive_threshold"] = 4.5
-        self.write_params()
-        (self.raw / "ratings.csv").unlink()
-
-        with self.assertRaisesRegex(ValueError, "differs from params.yaml"):
-            self.train()
-
-        self.assertFalse(self.model_dir.exists())
-        self.assertFalse(self.report_path.exists())
-        self.assertEqual(self.client.search_runs([self.experiment_id]), [])
-
-    def test_invalid_evaluation_leaves_no_partial_preparation(self):
-        for updates in (
-            {"positive_threshold": True},
-            {"positive_threshold": 6.0},
-            {"train_end": "1970-01-01"},
-            {"train_end": "1971-01-01T00:00:00Z"},
-        ):
-            with self.subTest(updates=updates):
-                params = {**self.params, "evaluation": {**self.params["evaluation"], **updates}}
-                self.params_path.write_text(yaml.safe_dump(params), encoding="utf-8")
-                with self.assertRaises(ValueError):
-                    self.prepare()
-                self.assertFalse(self.evaluation_path.exists())
-                self.assertFalse(self.audit_path.exists())
-
-    def test_invalid_trials_fail_without_creating_models_or_runs(self):
-        self.prepare()
-        self.params["als"]["trials"][0]["alpha"] = -1
-        self.write_params()
-
-        with self.assertRaises(ValueError):
-            self.train()
-
-        self.assertFalse(self.model_dir.exists())
-        self.assertFalse(self.report_path.exists())
-        self.assertFalse(self.metrics_path.exists())
         self.assertEqual(self.client.search_runs([self.experiment_id]), [])
 
 

@@ -72,6 +72,9 @@ L'API utilise le même port 8000 que le lancement natif : lancer un seul des deu
 `docker compose logs api` affiche les logs ; `docker compose down` arrête le service.
 Le modèle est monté depuis `artifacts/dvc/model/`.
 
+Pour construire une image avec le modèle inclus, suivre les
+[commandes de déploiement](docs/deployment.md).
+
 ## Entraînement
 
 Modifier [params.yaml](params.yaml), puis exécuter le pipeline :

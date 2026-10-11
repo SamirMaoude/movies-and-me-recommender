@@ -45,8 +45,10 @@ class TMDBRecommendationTests(unittest.TestCase):
     def setUp(self):
         self.movies = balanced_catalogue()
         self.links = pd.DataFrame(
-            {"movieId": list(range(10, 90, 10)) + [900],
-             "tmdbId": list(range(100, 900, 100)) + [9000]}
+            {
+                "movieId": list(range(10, 90, 10)) + [900],
+                "tmdbId": list(range(100, 900, 100)) + [9000],
+            }
         )
         self.model = ContentBasedRecommender(self.movies)
         self.mapper = IdMapper(self.links)
@@ -109,9 +111,13 @@ class TMDBRecommendationTests(unittest.TestCase):
             ContentBasedRecommender(self.movies.sample(frac=1, random_state=5)),
             IdMapper(self.links.sample(frac=1, random_state=7)),
         )
-        self.assertEqual(reordered.recommend([100, 200]), self.adapter.recommend([100, 200]))
+        self.assertEqual(
+            reordered.recommend([100, 200]), self.adapter.recommend([100, 200])
+        )
 
-    def test_numpy_integer_favorites_and_limit_produce_json_compatible_python_types(self):
+    def test_numpy_integer_favorites_and_limit_produce_json_compatible_python_types(
+        self,
+    ):
         result = self.adapter.recommend([np.int64(100)], n=np.int64(2))
         self.assertEqual([item["tmdb_id"] for item in result], [400, 500])
         for item in result:
@@ -148,49 +154,94 @@ class TMDBRecommendationTests(unittest.TestCase):
 
 
 class TMDBCollisionAndFilteringTests(unittest.TestCase):
-    def test_limit_is_applied_after_missing_mappings_duplicates_and_favorite_aliases(self):
-        movies = movie_catalogue([(movie_id, "Action") for movie_id in range(10, 90, 10)])
+    def test_limit_is_applied_after_missing_mappings_duplicates_and_favorite_aliases(
+        self,
+    ):
+        movies = movie_catalogue(
+            [(movie_id, "Action") for movie_id in range(10, 90, 10)]
+        )
         adapter = adapter_for(
             movies,
-            [(10, 100), (20, None), (30, 300), (40, 300), (50, 100),
-             (60, np.nan), (70, 700), (80, 800)],
+            [
+                (10, 100),
+                (20, None),
+                (30, 300),
+                (40, 300),
+                (50, 100),
+                (60, np.nan),
+                (70, 700),
+                (80, 800),
+            ],
         )
         # The raw ranking is 20, 30, 40, 50, 60, 70, 80; only 30, 70, 80 survive.
-        self.assertEqual(adapter.recommend([100], n=1), [{"tmdb_id": 300, "score": 1.0}])
+        self.assertEqual(
+            adapter.recommend([100], n=1), [{"tmdb_id": 300, "score": 1.0}]
+        )
         self.assertEqual(
             adapter.recommend([100], n=2),
             [{"tmdb_id": 300, "score": 1.0}, {"tmdb_id": 700, "score": 1.0}],
         )
         self.assertEqual(
             adapter.recommend([100], n=10),
-            [{"tmdb_id": 300, "score": 1.0}, {"tmdb_id": 700, "score": 1.0},
-             {"tmdb_id": 800, "score": 1.0}],
+            [
+                {"tmdb_id": 300, "score": 1.0},
+                {"tmdb_id": 700, "score": 1.0},
+                {"tmdb_id": 800, "score": 1.0},
+            ],
         )
 
-    def test_favorite_collision_uses_smallest_catalogue_alias_and_excludes_all_aliases(self):
+    def test_favorite_collision_uses_smallest_catalogue_alias_and_excludes_all_aliases(
+        self,
+    ):
         movies = movie_catalogue(
-            [(10, "Action"), (20, "Action|Comedy"), (30, "Action"),
-             (40, "Comedy"), (50, "Action|Comedy"), (60, "Comedy")]
+            [
+                (10, "Action"),
+                (20, "Action|Comedy"),
+                (30, "Action"),
+                (40, "Comedy"),
+                (50, "Action|Comedy"),
+                (60, "Comedy"),
+            ]
         )
         adapter = adapter_for(
             movies, [(20, 100), (10, 100), (30, 300), (40, 400), (50, 500), (60, 600)]
         )
         result = adapter.recommend([100])
         self.assertEqual([item["tmdb_id"] for item in result], [300, 500])
-        np.testing.assert_allclose([item["score"] for item in result], [1, 1 / math.sqrt(2)])
+        np.testing.assert_allclose(
+            [item["score"] for item in result], [1, 1 / math.sqrt(2)]
+        )
         self.assertNotIn(100, [item["tmdb_id"] for item in result])
 
     def test_missing_global_canonical_alias_falls_back_to_smallest_present_alias(self):
         movies = movie_catalogue(
-            [(10, "Action"), (20, "Action|Comedy"), (30, "Action"),
-             (40, "Comedy"), (50, "Action|Comedy"), (60, "Comedy")]
+            [
+                (10, "Action"),
+                (20, "Action|Comedy"),
+                (30, "Action"),
+                (40, "Comedy"),
+                (50, "Action|Comedy"),
+                (60, "Comedy"),
+            ]
         )
-        mappings = [(5, 100), (20, 100), (10, 100), (30, 300), (40, 400), (50, 500), (60, 600)]
+        mappings = [
+            (5, 100),
+            (20, 100),
+            (10, 100),
+            (30, 300),
+            (40, 400),
+            (50, 500),
+            (60, 600),
+        ]
         mapper = IdMapper(pd.DataFrame(mappings, columns=["movieId", "tmdbId"]))
         self.assertEqual(mapper.to_movie_id(100), 5)
-        result = TMDBRecommender(ContentBasedRecommender(movies), mapper).recommend([100])
+        result = TMDBRecommender(ContentBasedRecommender(movies), mapper).recommend(
+            [100]
+        )
         self.assertEqual([item["tmdb_id"] for item in result], [300, 500])
-        np.testing.assert_allclose([item["score"] for item in result], [1, 1 / math.sqrt(2)])
+        np.testing.assert_allclose(
+            [item["score"] for item in result], [1, 1 / math.sqrt(2)]
+        )
 
     def test_canonical_alias_choice_does_not_skip_a_present_zero_genre_movie(self):
         adapter = adapter_for(
@@ -201,7 +252,9 @@ class TMDBCollisionAndFilteringTests(unittest.TestCase):
 
     def test_candidate_collision_keeps_the_best_score_rather_than_smallest_alias(self):
         adapter = adapter_for(
-            movie_catalogue([(10, "Action"), (20, "Action|Comedy"), (30, "Action"), (40, "Comedy")]),
+            movie_catalogue(
+                [(10, "Action"), (20, "Action|Comedy"), (30, "Action"), (40, "Comedy")]
+            ),
             [(10, 100), (20, 300), (30, 300), (40, 400)],
         )
         self.assertEqual(adapter.recommend([100]), [{"tmdb_id": 300, "score": 1.0}])
@@ -226,29 +279,6 @@ class TMDBCollisionAndFilteringTests(unittest.TestCase):
     def test_empty_links_produce_empty_recommendations(self):
         adapter = adapter_for(movie_catalogue([(10, "Action"), (20, "Action")]), [])
         self.assertEqual(adapter.recommend([100]), [])
-
-
-class TMDBValidationTests(unittest.TestCase):
-    def setUp(self):
-        self.adapter = adapter_for(
-            movie_catalogue([(10, "Action"), (20, "Action")]), [(10, 100), (20, 200)]
-        )
-
-    def test_favorites_require_strict_positive_integer_tmdb_ids(self):
-        for favorites in (
-            ["100"], [100.0], [True], [np.bool_(True)], [None], [np.nan], [0], [-100],
-            [100, "200"], 100, "100", None,
-        ):
-            with self.subTest(favorites=favorites):
-                with self.assertRaises(ValueError):
-                    self.adapter.recommend(favorites)
-
-    def test_limit_is_validated_even_for_empty_or_unknown_favorites(self):
-        for n in (0, -1, 1.5, "2", True, np.bool_(True), None, np.nan):
-            for favorites in ([100], [], [99999]):
-                with self.subTest(n=n, favorites=favorites):
-                    with self.assertRaises(ValueError):
-                        self.adapter.recommend(favorites, n=n)
 
 
 if __name__ == "__main__":

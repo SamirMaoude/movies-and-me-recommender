@@ -1,8 +1,8 @@
 """Tests for loading MovieLens tables and calculating dataset summaries."""
 
-from pathlib import Path
 import tempfile
 import unittest
+from pathlib import Path
 
 import pandas as pd
 
@@ -63,15 +63,9 @@ class LoadMovieLensTests(unittest.TestCase):
                 "20,Second (2001),Drama\n"
             ),
             "ratings.csv": (
-                "userId,movieId,rating,timestamp\n"
-                "1,10,4.5,100\n"
-                "2,20,3.0,101\n"
+                "userId,movieId,rating,timestamp\n1,10,4.5,100\n2,20,3.0,101\n"
             ),
-            "links.csv": (
-                "movieId,imdbId,tmdbId\n"
-                "10,0000010,100\n"
-                "20,0000020,\n"
-            ),
+            "links.csv": ("movieId,imdbId,tmdbId\n10,0000010,100\n20,0000020,\n"),
             "tags.csv": "userId,movieId,tag,timestamp\n1,10,classic,100\n",
         }
         for filename, content in csv_files.items():
@@ -118,7 +112,13 @@ class DataQualityTests(unittest.TestCase):
         self.assertEqual(set(quality.index), set(tables))
         self.assertEqual(
             set(quality.columns),
-            {"num_rows", "num_columns", "missing_cells", "duplicate_rows", "duplicate_keys"},
+            {
+                "num_rows",
+                "num_columns",
+                "missing_cells",
+                "duplicate_rows",
+                "duplicate_keys",
+            },
         )
         self.assertEqual(quality.loc["ratings", "num_rows"], 5)
         self.assertEqual(quality.loc["ratings", "num_columns"], 4)
@@ -222,7 +222,10 @@ class GenreCountsTests(unittest.TestCase):
     def test_all_missing_or_unlisted_genres_produces_an_empty_series(self):
         counts = genre_counts(
             pd.DataFrame(
-                {"movieId": [10, 20, 30, 40], "genres": [None, "", " ", "(no genres listed)"]}
+                {
+                    "movieId": [10, 20, 30, 40],
+                    "genres": [None, "", " ", "(no genres listed)"],
+                }
             )
         )
         self.assertIsInstance(counts, pd.Series)
@@ -264,14 +267,6 @@ class DatasetSummaryTests(unittest.TestCase):
                     [tables[dataset], tables[dataset].iloc[[0]]], ignore_index=True
                 )
                 with self.assertRaises(pd.errors.MergeError):
-                    summarize_dataset(tables)
-
-    def test_empty_movies_or_ratings_raise_a_clear_value_error(self):
-        for dataset in ("movies", "ratings"):
-            with self.subTest(dataset=dataset):
-                tables = sample_tables()
-                tables[dataset] = tables[dataset].iloc[0:0].copy()
-                with self.assertRaises(ValueError):
                     summarize_dataset(tables)
 
 

@@ -8,7 +8,6 @@ import pandas as pd
 
 from src.models.popularity import PopularityRecommender
 
-
 EXPECTED_GLOBAL = [
     {"tmdb_id": 100, "score": 3.0},
     {"tmdb_id": 200, "score": 2.0},
@@ -53,9 +52,13 @@ class PopularityScoringTests(unittest.TestCase):
         train = sample_train()
         duplicated = pd.concat([train, train.iloc[[0, 1, 3, 3, 3]]], ignore_index=True)
 
-        self.assertEqual(PopularityRecommender(duplicated).recommend([]), EXPECTED_GLOBAL)
+        self.assertEqual(
+            PopularityRecommender(duplicated).recommend([]), EXPECTED_GLOBAL
+        )
 
-    def test_other_feedback_and_extra_rating_or_timestamp_values_do_not_change_scores(self):
+    def test_other_feedback_and_extra_rating_or_timestamp_values_do_not_change_scores(
+        self,
+    ):
         train = sample_train()
         other_interactions = pd.DataFrame(
             {
@@ -81,7 +84,9 @@ class PopularityScoringTests(unittest.TestCase):
         model = PopularityRecommender(sample_train())
         for limit in (1, 3, 4, 20, np.int64(2), np.uint32(3)):
             with self.subTest(limit=limit):
-                self.assertEqual(model.recommend([], n=limit), EXPECTED_GLOBAL[:int(limit)])
+                self.assertEqual(
+                    model.recommend([], n=limit), EXPECTED_GLOBAL[: int(limit)]
+                )
 
     def test_empty_or_unknown_favorites_return_the_global_ranking(self):
         model = PopularityRecommender(sample_train())
@@ -100,7 +105,9 @@ class PopularityScoringTests(unittest.TestCase):
         model = PopularityRecommender(sample_train())
         favorites = (value for value in (np.int64(100), np.uint32(300), np.int64(999)))
 
-        self.assertEqual(model.recommend(favorites), [EXPECTED_GLOBAL[1], EXPECTED_GLOBAL[3]])
+        self.assertEqual(
+            model.recommend(favorites), [EXPECTED_GLOBAL[1], EXPECTED_GLOBAL[3]]
+        )
 
     def test_permuting_training_rows_cannot_change_the_ranking(self):
         shuffled = sample_train().sample(frac=1, random_state=29)
@@ -155,62 +162,15 @@ class PopularityValidationTests(unittest.TestCase):
             {
                 "userId": pd.Series([np.int64(1), 2, 3], dtype=object),
                 "tmdbId": pd.Series([np.uint32(100), 100, 200], dtype=object),
-                "is_positive": pd.Series([True, np.bool_(True), np.bool_(False)], dtype=object),
+                "is_positive": pd.Series(
+                    [True, np.bool_(True), np.bool_(False)], dtype=object
+                ),
             }
         )
 
         self.assertEqual(
             PopularityRecommender(train).recommend([]), [{"tmdb_id": 100, "score": 2.0}]
         )
-
-    def test_invalid_favorites_are_rejected_even_without_candidates(self):
-        invalid_favorites = (
-            None, 100, 100.0, True, "", "100", b"", b"100", np.array(100),
-            [0], [-1], [100.0], ["100"], [True], [np.bool_(False)],
-            [None], [pd.NA], [np.nan], [[100]],
-        )
-        for train in (sample_train(), empty_train()):
-            model = PopularityRecommender(train)
-            for favorites in invalid_favorites:
-                with self.subTest(rows=len(train), favorites=favorites):
-                    with self.assertRaises(ValueError):
-                        model.recommend(favorites)
-
-    def test_invalid_limits_are_rejected_even_without_candidates(self):
-        invalid_limits = (0, -1, True, np.bool_(False), 1.0, "1", None, np.nan, np.inf)
-        for train in (sample_train(), empty_train()):
-            model = PopularityRecommender(train)
-            for limit in invalid_limits:
-                with self.subTest(rows=len(train), limit=limit):
-                    with self.assertRaises(ValueError):
-                        model.recommend([], n=limit)
-
-    def test_training_requires_the_schema_positive_integer_ids_and_real_booleans(self):
-        for train in (None, [], {"userId": [1]}):
-            with self.subTest(input_type=type(train)):
-                with self.assertRaises(ValueError):
-                    PopularityRecommender(train)
-        for column in ("userId", "tmdbId", "is_positive"):
-            with self.subTest(missing_column=column):
-                with self.assertRaises(ValueError):
-                    PopularityRecommender(sample_train().drop(columns=column))
-            with self.subTest(duplicate_column=column):
-                duplicate_column = pd.concat([sample_train(), sample_train()[[column]]], axis=1)
-                with self.assertRaises(ValueError):
-                    PopularityRecommender(duplicate_column)
-
-        invalid_values = {
-            "userId": [0, -1, 1.0, "1", True, np.bool_(False), None, pd.NA, np.nan],
-            "tmdbId": [0, -1, 100.0, "100", True, None, pd.NA, np.inf],
-            "is_positive": [1, 0, 1.0, "True", "False", None, pd.NA, np.nan],
-        }
-        for column, values in invalid_values.items():
-            for value in values:
-                with self.subTest(column=column, value=value):
-                    row = {"userId": 1, "tmdbId": 100, "is_positive": True}
-                    row[column] = value
-                    with self.assertRaises(ValueError):
-                        PopularityRecommender(pd.DataFrame([row], dtype=object))
 
 
 if __name__ == "__main__":

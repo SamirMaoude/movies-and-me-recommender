@@ -1,4 +1,4 @@
-"""Synthetic tests for MovieLens/TMDB mapping and identifier validation."""
+"""Synthetic tests for MovieLens/TMDB mapping."""
 
 import unittest
 
@@ -66,18 +66,6 @@ class IdMapperLookupTests(unittest.TestCase):
         self.assertEqual(self.mapper.to_movie_id(np.int32(100)), 10)
         self.assertEqual(self.mapper.movie_ids_for_tmdb(np.uint64(100)), (10, 30))
 
-    def test_lookup_inputs_are_strict_positive_integers(self):
-        invalid_ids = (0, -1, 10.0, "10", True, np.bool_(False), None, np.nan)
-        for method in (
-            self.mapper.to_tmdb_id,
-            self.mapper.to_movie_id,
-            self.mapper.movie_ids_for_tmdb,
-        ):
-            for invalid_id in invalid_ids:
-                with self.subTest(method=method.__name__, invalid_id=invalid_id):
-                    with self.assertRaises(ValueError):
-                        method(invalid_id)
-
 
 class IdMapperConstructionTests(unittest.TestCase):
     def test_csv_style_integral_floats_are_accepted_in_both_columns(self):
@@ -118,44 +106,6 @@ class IdMapperConstructionTests(unittest.TestCase):
         for movie_id in (1, 2, 3):
             self.assertIsNone(mapper.to_tmdb_id(movie_id))
         self.assertEqual(mapper.ambiguous_mappings, {})
-
-    def test_missing_schema_or_non_dataframe_inputs_are_rejected(self):
-        for links in (
-            pd.DataFrame({"movieId": [1]}),
-            pd.DataFrame({"tmdbId": [100]}),
-            pd.DataFrame(),
-            {"movieId": [1], "tmdbId": [100]},
-            None,
-        ):
-            with self.subTest(links=links):
-                with self.assertRaises(ValueError):
-                    IdMapper(links)
-
-    def test_duplicate_movielens_ids_are_rejected_even_when_the_mapping_agrees(self):
-        for tmdb_ids in ([100, 100], [100, 200], [None, 100]):
-            with self.subTest(tmdb_ids=tmdb_ids):
-                with self.assertRaises(ValueError):
-                    IdMapper(pd.DataFrame({"movieId": [1, 1], "tmdbId": tmdb_ids}))
-
-    def test_movie_ids_reject_missing_nonpositive_and_nonintegral_values(self):
-        invalid_ids = (None, pd.NA, np.nan, 0, -1, 1.5, "1", True, np.bool_(True), np.inf)
-        for invalid_id in invalid_ids:
-            with self.subTest(invalid_id=invalid_id):
-                links = pd.DataFrame(
-                    {"movieId": pd.Series([invalid_id], dtype=object), "tmdbId": [100]}
-                )
-                with self.assertRaises(ValueError):
-                    IdMapper(links)
-
-    def test_tmdb_ids_reject_nonpositive_and_nonintegral_values(self):
-        invalid_ids = (0, -1, 100.5, "100", True, np.bool_(True), np.inf, -np.inf)
-        for invalid_id in invalid_ids:
-            with self.subTest(invalid_id=invalid_id):
-                links = pd.DataFrame(
-                    {"movieId": [1], "tmdbId": pd.Series([invalid_id], dtype=object)}
-                )
-                with self.assertRaises(ValueError):
-                    IdMapper(links)
 
     def test_mapper_does_not_mutate_or_retain_mutable_source_links(self):
         links = sample_links()

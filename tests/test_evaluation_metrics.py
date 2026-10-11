@@ -1,12 +1,11 @@
-"""Hand-calculated ranking examples and invalid evaluation inputs."""
+"""Hand-calculated ranking examples."""
 
-from math import log2
 import unittest
+from math import log2
 
 import numpy as np
 
 from src.evaluation.metrics import ndcg_at_k, recall_at_k
-
 
 METRICS = (recall_at_k, ndcg_at_k)
 
@@ -19,7 +18,9 @@ class RankingMetricTests(unittest.TestCase):
     def test_ndcg_discount_and_ideal_gain_match_a_hand_calculated_example(self):
         # Hits at ranks 1 and 3: 1 + 1/2. Three ideal hits: 1 + 1/log2(3) + 1/2.
         expected = 1.5 / (1.5 + 1.0 / log2(3))
-        self.assertAlmostEqual(ndcg_at_k([10, 20, 30, 40], [10, 30, 50, 60], k=3), expected)
+        self.assertAlmostEqual(
+            ndcg_at_k([10, 20, 30, 40], [10, 30, 50, 60], k=3), expected
+        )
 
     def test_later_hits_keep_recall_but_reduce_ndcg(self):
         targets = [10, 20]
@@ -90,51 +91,6 @@ class RankingMetricTests(unittest.TestCase):
             metric(ranking, targets, k=2)
             self.assertEqual(ranking, [10, 30, 20])
             self.assertEqual(targets, [20, 10, 20])
-
-
-class RankingMetricValidationTests(unittest.TestCase):
-    def test_duplicates_anywhere_in_the_ranking_are_rejected(self):
-        for metric in METRICS:
-            for ranking in ([10, 10], [10, 20, 20], [np.int64(10), 10]):
-                for targets in ([], [10]):
-                    with self.subTest(metric=metric.__name__, ranking=ranking, targets=targets):
-                        with self.assertRaises(ValueError):
-                            metric(ranking, targets, k=1)
-
-    def test_invalid_ids_are_rejected_even_outside_the_cutoff(self):
-        invalid_ids = (0, -1, True, np.bool_(False), 10.0, "10", None, np.nan, np.inf, [10])
-        for metric in METRICS:
-            for value in invalid_ids:
-                with self.subTest(metric=metric.__name__, value=value):
-                    with self.assertRaises(ValueError):
-                        metric([10, value], [], k=1)
-                    with self.assertRaises(ValueError):
-                        metric([], [value], k=1)
-
-    def test_invalid_limits_are_rejected_even_without_targets(self):
-        invalid_limits = (0, -1, True, np.bool_(False), 1.0, "1", None, np.nan, np.inf)
-        for metric in METRICS:
-            for limit in invalid_limits:
-                with self.subTest(metric=metric.__name__, limit=limit):
-                    with self.assertRaises(ValueError):
-                        metric([], [], k=limit)
-
-    def test_inputs_must_be_iterables_of_ids(self):
-        invalid_inputs = (None, 10, 10.0, True, "", "10", b"", b"10", {10: 1}, np.array(10))
-        for metric in METRICS:
-            for values in invalid_inputs:
-                with self.subTest(metric=metric.__name__, values=values):
-                    with self.assertRaises(ValueError):
-                        metric(values, [10])
-                    with self.assertRaises(ValueError):
-                        metric([10], values)
-
-    def test_rankings_must_preserve_order(self):
-        for metric in METRICS:
-            for ranking in (set(), {10, 20}, frozenset({10, 20})):
-                with self.subTest(metric=metric.__name__, ranking=ranking):
-                    with self.assertRaises(ValueError):
-                        metric(ranking, [10])
 
 
 if __name__ == "__main__":

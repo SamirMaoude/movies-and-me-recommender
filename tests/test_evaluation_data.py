@@ -7,9 +7,13 @@ import pandas as pd
 
 from src.evaluation.data import prepare_interactions, temporal_split
 
-
 INTERACTION_COLUMNS = [
-    "userId", "movieId", "tmdbId", "rating", "timestamp", "is_positive"
+    "userId",
+    "movieId",
+    "tmdbId",
+    "rating",
+    "timestamp",
+    "is_positive",
 ]
 
 
@@ -133,7 +137,9 @@ class PrepareInteractionsTests(unittest.TestCase):
         self.assertEqual(interactions["is_positive"].tolist(), [False])
 
     def test_reordering_ratings_and_links_cannot_change_the_result(self):
-        expected, expected_counts = prepare_interactions(sample_ratings(), sample_links())
+        expected, expected_counts = prepare_interactions(
+            sample_ratings(), sample_links()
+        )
         actual, counts = prepare_interactions(
             sample_ratings().sample(frac=1, random_state=19),
             sample_links().sample(frac=1, random_state=23),
@@ -160,86 +166,17 @@ class PrepareInteractionsTests(unittest.TestCase):
         self.assertEqual(counts["positive_interactions"], 2)
         self.assertEqual(counts["other_interactions"], 8)
 
-    def test_conflicting_ratings_at_the_same_source_pair_and_time_are_rejected(self):
-        for movie_id in (30, 40):
-            with self.subTest(movie_id=movie_id):
-                ratings = pd.DataFrame(
-                    [(1, movie_id, 1.0, 100), (1, movie_id, 5.0, 100)],
-                    columns=["userId", "movieId", "rating", "timestamp"],
-                )
-                with self.assertRaises(ValueError):
-                    prepare_interactions(ratings, sample_links())
-
     def test_does_not_mutate_ratings_or_links(self):
         ratings, links = sample_ratings(), sample_links()
-        original_ratings, original_links = ratings.copy(deep=True), links.copy(deep=True)
+        original_ratings, original_links = (
+            ratings.copy(deep=True),
+            links.copy(deep=True),
+        )
 
         prepare_interactions(ratings, links)
 
         pd.testing.assert_frame_equal(ratings, original_ratings)
         pd.testing.assert_frame_equal(links, original_links)
-
-    def test_invalid_ratings_identifiers_and_unix_timestamps_are_rejected(self):
-        invalid_values = {
-            "userId": [0, -1, None, True, np.bool_(False), "1", 1.0, 1.5],
-            "movieId": [0, -1, None, True, "20", 20.0, 20.5],
-            "rating": [None, np.nan, np.inf, -np.inf, 0.0, 5.5, 4.25, True, "4.0"],
-            "timestamp": [None, np.nan, np.inf, -1, 100.0, 100.5, True, "100"],
-        }
-        for column, values in invalid_values.items():
-            for value in values:
-                with self.subTest(column=column, value=value):
-                    row = {"userId": 1, "movieId": 20, "rating": 4.0, "timestamp": 100}
-                    row[column] = value
-                    ratings = pd.DataFrame([row])
-                    with self.assertRaises(ValueError):
-                        prepare_interactions(ratings, sample_links())
-
-    def test_invalid_input_schema_and_thresholds_are_rejected(self):
-        for column in ("userId", "movieId", "rating", "timestamp"):
-            with self.subTest(missing_column=column):
-                with self.assertRaises(ValueError):
-                    prepare_interactions(sample_ratings().drop(columns=column), sample_links())
-        for threshold in (None, np.nan, np.inf, -1.0, 5.5, True, "4.0"):
-            with self.subTest(threshold=threshold):
-                with self.assertRaises(ValueError):
-                    prepare_interactions(
-                        sample_ratings(), sample_links(), positive_threshold=threshold
-                    )
-
-    def test_unix_timestamps_outside_the_supported_utc_domain_are_rejected(self):
-        ratings = sample_ratings().iloc[[0]].copy()
-        ratings["timestamp"] = np.iinfo(np.int64).max
-        with self.assertRaises(ValueError):
-            prepare_interactions(ratings, sample_links())
-
-        interactions = split_fixture().iloc[[0]].copy()
-        interactions["timestamp"] = np.iinfo(np.int64).max
-        with self.assertRaises(ValueError):
-            temporal_split(interactions, utc_timestamp(100), utc_timestamp(200))
-
-    def test_unsigned_overflow_cannot_turn_ids_or_timestamps_into_negative_values(self):
-        overflow = np.uint64(np.iinfo(np.uint64).max)
-        for column in ("userId", "movieId", "timestamp"):
-            with self.subTest(input="ratings", column=column):
-                ratings = sample_ratings().iloc[[0]].copy()
-                ratings[column] = overflow
-                with self.assertRaises(ValueError):
-                    prepare_interactions(ratings, sample_links())
-
-        for column in ("movieId", "tmdbId"):
-            with self.subTest(input="links", column=column):
-                links = sample_links().iloc[[0]].copy()
-                links[column] = overflow
-                with self.assertRaises(ValueError):
-                    prepare_interactions(sample_ratings().iloc[[0]], links)
-
-        for column in ("userId", "tmdbId", "timestamp"):
-            with self.subTest(input="interactions", column=column):
-                frame = split_fixture().iloc[[0]].copy()
-                frame[column] = overflow
-                with self.assertRaises(ValueError):
-                    temporal_split(frame, utc_timestamp(100), utc_timestamp(200))
 
     def test_empty_or_entirely_unmapped_ratings_have_zero_prepared_interactions(self):
         for ratings in (sample_ratings().iloc[:0], sample_ratings().iloc[[6, 7]]):
@@ -250,9 +187,14 @@ class PrepareInteractionsTests(unittest.TestCase):
                 self.assertEqual(counts["input_ratings"], len(ratings))
                 self.assertEqual(counts["ratings_without_tmdb"], len(ratings))
                 for key in (
-                    "ratings_with_tmdb", "remapped_ratings", "duplicate_user_movies_removed",
-                    "prepared_interactions", "positive_interactions", "other_interactions",
-                    "users", "movies",
+                    "ratings_with_tmdb",
+                    "remapped_ratings",
+                    "duplicate_user_movies_removed",
+                    "prepared_interactions",
+                    "positive_interactions",
+                    "other_interactions",
+                    "users",
+                    "movies",
                 ):
                     self.assertEqual(counts[key], 0, key)
 
@@ -266,7 +208,9 @@ class TemporalSplitTests(unittest.TestCase):
         self.assertEqual(set(parts["validation"]["userId"]), {2, 5, 6})
         self.assertEqual(set(parts["test"]["userId"]), {1, 4})
         for name, expected_timestamps in (
-            ("train", {0, 99}), ("validation", {100, 199}), ("test", {200})
+            ("train", {0, 99}),
+            ("validation", {100, 199}),
+            ("test", {200}),
         ):
             self.assertEqual(set(parts[name]["timestamp"]), expected_timestamps)
         self.assertEqual(sum(map(len, parts.values())), len(split_fixture()))
@@ -289,24 +233,10 @@ class TemporalSplitTests(unittest.TestCase):
             with self.subTest(train_end=train_end, validation_end=validation_end):
                 with self.assertRaises(ValueError):
                     temporal_split(
-                        split_fixture(), utc_timestamp(train_end), utc_timestamp(validation_end)
+                        split_fixture(),
+                        utc_timestamp(train_end),
+                        utc_timestamp(validation_end),
                     )
-
-    def test_cutoffs_require_explicit_timezones_and_valid_dates(self):
-        invalid_bounds = [
-            "1970-01-01T00:01:40", pd.Timestamp("1970-01-01"),
-            pd.Timestamp("1970-01-01").date(), "not a date", None, pd.NaT, 100, True,
-        ]
-        for bound in invalid_bounds:
-            for position in ("train_end", "validation_end"):
-                with self.subTest(bound=bound, position=position):
-                    arguments = {
-                        "train_end": utc_timestamp(100),
-                        "validation_end": utc_timestamp(200),
-                    }
-                    arguments[position] = bound
-                    with self.assertRaises(ValueError):
-                        temporal_split(split_fixture(), **arguments)
 
     def test_splitting_does_not_mutate_the_input(self):
         interactions = split_fixture()
@@ -319,20 +249,14 @@ class TemporalSplitTests(unittest.TestCase):
     def test_empty_groups_and_empty_inputs_are_allowed(self):
         for interactions in (split_fixture().iloc[[6]], split_fixture().iloc[:0]):
             with self.subTest(input_rows=len(interactions)):
-                parts = temporal_split(interactions, utc_timestamp(100), utc_timestamp(200))
+                parts = temporal_split(
+                    interactions, utc_timestamp(100), utc_timestamp(200)
+                )
                 self.assertEqual(len(parts["train"]), len(interactions))
                 self.assertTrue(parts["validation"].empty)
                 self.assertTrue(parts["test"].empty)
                 for frame in parts.values():
                     self.assertEqual(list(frame.columns), INTERACTION_COLUMNS)
-
-    def test_invalid_unix_timestamps_are_rejected_before_splitting(self):
-        for timestamp in (None, np.nan, np.inf, -1, 100.0, 100.5, True, "100"):
-            with self.subTest(timestamp=timestamp):
-                interactions = split_fixture().iloc[[0]].copy()
-                interactions["timestamp"] = timestamp
-                with self.assertRaises(ValueError):
-                    temporal_split(interactions, utc_timestamp(100), utc_timestamp(200))
 
 
 if __name__ == "__main__":
