@@ -25,8 +25,8 @@ stages:
       size: 118660
     - path: requirements.txt
       hash: md5
-      md5: d3e871683219dca8410edddfd1b477ac
-      size: 609
+      md5: 72d4168bb7ecebc7c0a38ce87e1c01a3
+      size: 719
     - path: src/__init__.py
       hash: md5
       md5: 19c9c4aaeffe4e5084f65cb2191d1efa
@@ -107,8 +107,8 @@ stages:
       size: 118660
     - path: requirements.txt
       hash: md5
-      md5: d3e871683219dca8410edddfd1b477ac
-      size: 609
+      md5: 72d4168bb7ecebc7c0a38ce87e1c01a3
+      size: 719
     - path: src/__init__.py
       hash: md5
       md5: 19c9c4aaeffe4e5084f65cb2191d1efa
@@ -211,13 +211,13 @@ stages:
     outs:
     - path: artifacts/dvc/model
       hash: md5
-      md5: 666a60c805c4fd00bddf2b9ce3f33bc9.dir
+      md5: 5a5936ab40b1419ef5a507ab6c5720a1.dir
       size: 1865027
       nfiles: 4
     - path: reports/dvc/comparison.json
       hash: md5
-      md5: 6c91b89c9f0259f828209571e2c6d9cf
-      size: 83834
+      md5: b1b769d42f3ae8825e9316d0b068d8c5
+      size: 83836
     - path: reports/dvc/metrics.json
       hash: md5
       md5: 66b286072659fe7138e7486f69d29cbc
