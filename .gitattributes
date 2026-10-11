@@ -1,0 +1,7 @@
+/.gitattributes text eol=lf
+/src/**/*.py text eol=lf
+/requirements.txt text eol=lf
+/params.yaml text eol=lf
+/dvc.yaml text eol=lf
+/dvc.lock text eol=lf
+/reports/dvc/metrics.json text eol=lf

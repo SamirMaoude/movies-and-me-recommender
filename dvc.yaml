@@ -1,0 +1,62 @@
+stages:
+  prepare:
+    cmd: python -m src.pipeline.run prepare
+    deps:
+      - .gitattributes
+      - data/raw/ratings.csv
+      - data/raw/links.csv
+      - data/raw/movies.csv
+      - data/raw/tags.csv
+      - src/__init__.py
+      - src/data/__init__.py
+      - src/evaluation/__init__.py
+      - src/pipeline/__init__.py
+      - src/pipeline/run.py
+      - src/data/exploration.py
+      - src/data/id_mapper.py
+      - src/evaluation/data.py
+      - src/evaluation/prepare.py
+      - requirements.txt
+    params:
+      - evaluation
+    outs:
+      - artifacts/dvc/evaluation.json
+      - reports/dvc/data.json
+
+  train:
+    cmd: python -m src.pipeline.run train
+    deps:
+      - .gitattributes
+      - data/raw/ratings.csv
+      - data/raw/links.csv
+      - data/raw/movies.csv
+      - data/raw/tags.csv
+      - artifacts/dvc/evaluation.json
+      - src/__init__.py
+      - src/data/__init__.py
+      - src/evaluation/__init__.py
+      - src/models/__init__.py
+      - src/training/__init__.py
+      - src/pipeline/__init__.py
+      - src/pipeline/run.py
+      - src/data/exploration.py
+      - src/data/id_mapper.py
+      - src/evaluation/compare.py
+      - src/evaluation/data.py
+      - src/evaluation/metrics.py
+      - src/evaluation/prepare.py
+      - src/models/collaborative.py
+      - src/models/content_based.py
+      - src/models/popularity.py
+      - src/models/tmdb_recommender.py
+      - src/training/train.py
+      - requirements.txt
+    params:
+      - als
+      - tracking.uri
+    outs:
+      - artifacts/dvc/model
+      - reports/dvc/comparison.json
+    metrics:
+      - reports/dvc/metrics.json:
+          cache: false

@@ -15,3 +15,4 @@ threadpoolctl==3.7.0
 mlflow==3.17.0
 # Data versioning and reproducible pipelines.
 dvc==3.67.1
+PyYAML==6.0.3
