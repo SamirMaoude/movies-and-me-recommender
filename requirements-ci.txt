@@ -1,0 +1,9 @@
+-r requirements-api.txt
+
+# Existing training and registry tests use a local SQLite MLflow backend.
+# Full MLflow also supplies distribution metadata recorded by train.py.
+mlflow==3.17.0
+scikit-learn==1.9.1
+PyYAML==6.0.3
+httpx2==2.13.1
+ruff==0.17.0

@@ -879,7 +879,7 @@ sans CSV et sans accès à un suivi ou un registre MLflow. Les sorties DVC
 ont été recalculées pour les nouvelles dépendances, avec les mêmes
 métriques, puis envoyées vers S3. La version `champion` est conservée.
 
-## Phase 9 : Docker
+## Phase 9 : Docker et intégration continue
 
 Le `Dockerfile` construit une image CPU avec Python 3.12. L'API utilise
 `requirements-api.txt`, qui contient ses dépendances et le client léger
@@ -951,6 +951,52 @@ Desktop Linux sur Windows. Avec le modèle DVC, dix recommandations
 correspondent au calcul direct sous Windows. Les routes HTTP, la solution
 de secours, les erreurs 422 et `/docs` répondent correctement. Le modèle et
 le système de fichiers du conteneur sont en lecture seule.
+
+### Contrôles GitHub Actions
+
+Le workflow [.github/workflows/ci.yml](.github/workflows/ci.yml) est prévu
+pour les pull requests vers `main` et les pushes sur `main`, `chore/docker`
+et `ci/github-actions`. Il comporte deux jobs sous Ubuntu avec Python 3.12 :
+
+1. Installer `requirements-ci.txt`, vérifier les dépendances, rechercher
+   les erreurs Python avec Ruff, contrôler le format des scripts de
+   vérification et exécuter tous les tests `unittest`.
+2. Entraîner le petit modèle synthétique, construire l'image CPU, démarrer
+   le conteneur et vérifier les routes HTTP. Le conteneur de test est
+   supprimé à la fin, y compris en cas d'échec.
+
+Les tests d'entraînement et de registre utilisent leurs propres fichiers
+temporaires et bases SQLite. La CI n'a besoin ni des CSV MovieLens, ni de
+la base MLflow du PC, ni d'une connexion AWS. L'image Docker utilise
+`mlflow-skinny` ; les tests utilisent MLflow complet pour le suivi SQLite
+et les informations d'environnement enregistrées par l'entraînement.
+
+Les actions GitHub sont identifiées par un commit précis. Le workflow
+dispose uniquement d'un accès en lecture au dépôt et ne publie pas d'image.
+Le déploiement appartient à la phase 10.
+
+Pour reproduire les contrôles Python dans un environnement Python 3.12 :
+
+```bat
+python -m pip install -r requirements-ci.txt
+python -m pip check
+python -m ruff check src tests scripts --select E9,F63,F7,F82
+python -m ruff format --check scripts
+python -m unittest discover -s tests -v
+```
+
+Le workflow a été validé avec `actionlint`. Les **241 tests** passent dans
+un conteneur Linux avec `requirements-ci.txt`, ainsi que les contrôles Ruff
+et la vérification des dépendances. Le petit entraînement et le test HTTP
+du modèle synthétique passent aussi dans Docker. La validation sur GitHub
+reste à faire après publication de la branche :
+
+```bat
+git push -u origin ci/github-actions
+```
+
+Consulter ensuite l'onglet **Actions** du dépôt et vérifier que les deux
+jobs passent avant l'intégration dans `main`.
 
 ## Reproduire l'analyse
 
