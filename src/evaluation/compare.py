@@ -1,13 +1,13 @@
 """Compare the popularity and genre baselines on the frozen validation split."""
 
 import argparse
-from dataclasses import dataclass
 import hashlib
-from importlib.metadata import version
 import json
+import platform
+from dataclasses import dataclass
+from importlib.metadata import version
 from numbers import Integral, Real
 from pathlib import Path
-import platform
 from statistics import fmean
 
 import numpy as np
