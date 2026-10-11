@@ -197,8 +197,10 @@ et [tests/test_tmdb_recommender.py](tests/test_tmdb_recommender.py). Aucun appel
 
 [src/evaluation/data.py](src/evaluation/data.py) prépare les interactions
 et les sépare dans le temps. Une note **supérieure ou égale à 4/5** compte
-comme un avis positif. Le seuil est configurable. Les notes plus faibles sont
-conservées pour pouvoir exclure les films déjà vus des recommandations.
+comme un avis positif. Ces avis servent de favoris simulés pour MovieLens.
+Le seuil est configurable. Les notes plus faibles sont conservées pour l'audit
+des données ; seuls les favoris transmis sont exclus des recommandations,
+comme dans l'application qui ne fournit aucune note ni historique de visionnage.
 
 Les films sont reliés à TMDB avec la règle de la phase 3. Pour une même paire
 utilisateur/film TMDB, on garde la première interaction, puis le plus petit
@@ -258,8 +260,55 @@ Les tests de préparation et de couverture sont dans
 À ce stade, le test final est décrit par ses volumes uniquement ; aucune
 performance de recommandation n'est calculée.
 
-La suite de la phase 4 est le classement par popularité, puis le calcul de
-Recall@10 et NDCG@10 sur la validation avec un protocole commun aux modèles.
+### Classement par popularité
+
+[src/models/popularity.py](src/models/popularity.py) compte, pour chaque film
+TMDB, les utilisateurs distincts ayant un avis positif dans les données
+**d'apprentissage uniquement**. Un même utilisateur compte une seule fois
+pour un film, même si la paire apparaît plusieurs fois. Les autres notes
+n'ajoutent aucun poids au classement.
+
+Les films sont classés par nombre d'utilisateurs décroissant, puis par ID TMDB
+croissant en cas d'égalité. Le score est ce nombre d'utilisateurs, renvoyé
+comme un nombre décimal ; il peut dépasser 1 et ne représente pas une probabilité.
+Les favoris sont retirés avant de limiter les résultats. Une liste vide ou
+des favoris inconnus renvoient le classement global ; un apprentissage sans
+avis positif renvoie une liste vide.
+
+Exemple depuis la racine du dépôt :
+
+```python
+import json
+from pathlib import Path
+
+from src.data.exploration import load_movielens
+from src.evaluation.data import prepare_interactions, temporal_split
+from src.models.popularity import PopularityRecommender
+
+config = json.loads(Path("config/evaluation.json").read_text(encoding="utf-8"))
+tables = load_movielens("data/raw")
+interactions, _ = prepare_interactions(
+    tables["ratings"], tables["links"], config["positive_threshold"],
+)
+splits = temporal_split(interactions, config["train_end"], config["validation_end"])
+recommender = PopularityRecommender(splits["train"])
+recommendations = recommender.recommend([27205, 157336, 155, 603], n=10)
+print(recommendations)
+```
+
+Ce scénario renvoie les IDs TMDB
+`[278, 680, 13, 274, 11, 197, 424, 629, 1891, 550]`.
+Les trois premiers sont *The Shawshank Redemption* (218 utilisateurs positifs),
+*Pulp Fiction* (208) et *Forrest Gump* (203). Matrix, ID TMDB 603, est retiré
+car il fait partie des favoris transmis. Ces comptes proviennent du groupe
+d'apprentissage ; ils ne mesurent pas la qualité des recommandations.
+
+Les tests du classement et des cas limites sont dans
+[tests/test_popularity.py](tests/test_popularity.py). Aucune nouvelle dépendance
+n'est nécessaire. Le modèle par genres et son adaptateur TMDB restent disponibles.
+
+La suite de la phase 4 est le calcul de Recall@10 et NDCG@10, puis la comparaison
+sur la validation avec les mêmes favoris simulés, candidats et exclusions.
 
 ## Reproduire l'analyse
 

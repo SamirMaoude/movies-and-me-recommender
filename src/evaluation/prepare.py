@@ -82,6 +82,8 @@ def build_report(data_dir: Path, config_path: Path) -> dict:
             "canonical_movie_id": "smallest MovieLens ID declared in links for each TMDB ID",
             "duplicate_user_movie": "earliest timestamp, then smallest source movieId",
             "cutoff_boundaries": "equal timestamps belong to the next split",
+            "request_history": "positive interactions simulate favorites",
+            "recommendation_exclusions": "supplied favorites only; lower ratings are not exclusions",
             "test_usage": "descriptive data counts only; no model evaluation",
         },
         "sources": {

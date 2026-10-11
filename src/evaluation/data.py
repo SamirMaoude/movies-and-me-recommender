@@ -63,9 +63,10 @@ def prepare_interactions(
 ) -> tuple[pd.DataFrame, dict[str, int]]:
     """Link ratings to TMDB, mark positives and keep the first user/film event.
 
-    Lower ratings remain available to exclude previously seen movies. Missing
-    TMDB associations are counted and excluded. Each TMDB film uses the smallest
-    MovieLens ID declared in links, even if that ID has no rating of its own.
+    Lower ratings remain available for the data audit. Only positive feedback
+    simulates favorites; lower ratings do not add recommendation exclusions.
+    Missing TMDB associations are counted and excluded. Each TMDB film uses
+    the smallest MovieLens ID in links, even if that ID has no rating of its own.
 
     Repeated user/TMDB pairs keep the earliest timestamp, then the smallest
     original MovieLens ID. This rule never prefers a higher or later rating.
