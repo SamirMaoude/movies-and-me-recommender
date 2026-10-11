@@ -756,7 +756,7 @@ dans `main`.
 
 ## Phase 8 : API de recommandations avec FastAPI
 
-La phase 8 est terminée. [src/api/main.py](src/api/main.py)
+La phase 8 est terminée et intégrée dans `main`. [src/api/main.py](src/api/main.py)
 expose les routes HTTP ; [src/api/service.py](src/api/service.py) réutilise
 le chargeur de modèle et les recommandations existantes. Les formats des
 requêtes et des réponses sont définis dans
