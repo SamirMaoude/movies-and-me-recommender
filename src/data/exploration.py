@@ -1,9 +1,11 @@
-"""Load MovieLens tables and summarize ratings, genres and TMDB coverage."""
+"""Load the MovieLens CSV files and summarize them for exploration."""
 
 from pathlib import Path
 
 import pandas as pd
 
+# IMDb IDs stay strings to keep their leading zeros; tmdbId is nullable
+# because some movies have no TMDB link.
 SCHEMAS = {
     "movies": {"movieId": "int64", "title": "string", "genres": "string"},
     "ratings": {
@@ -31,22 +33,10 @@ TABLE_KEYS = {
 
 
 def load_movielens(data_dir: str | Path) -> dict[str, pd.DataFrame]:
-    """Load the four CSVs, keeping leading IMDb zeros and missing TMDB IDs.
-
-    Raise an error if a file is missing or its columns differ from the schema.
-    """
-    data_dir = Path(data_dir)
-    missing = [
-        f"{name}.csv" for name in SCHEMAS if not (data_dir / f"{name}.csv").is_file()
-    ]
-    if missing:
-        raise FileNotFoundError(
-            f"Missing MovieLens files in {data_dir}: {', '.join(missing)}"
-        )
-
+    """Read the four CSV files, checking their columns and types."""
     tables = {}
     for name, schema in SCHEMAS.items():
-        path = data_dir / f"{name}.csv"
+        path = Path(data_dir) / f"{name}.csv"
         frame = pd.read_csv(path, dtype=schema, encoding="utf-8")
         if set(frame.columns) != set(schema):
             raise ValueError(
@@ -77,11 +67,7 @@ def interaction_tables(
     movies: pd.DataFrame,
     ratings: pd.DataFrame,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Return counts and mean scores per user and per catalog movie.
-
-    Users come from ratings. Every catalog movie is retained, including those
-    with zero ratings; their mean score stays missing rather than becoming 0.
-    """
+    """Count and average ratings per user and per movie, keeping unrated movies."""
     aggregates = {"num_ratings": ("rating", "size"), "avg_rating": ("rating", "mean")}
     per_user = ratings.groupby("userId").agg(**aggregates)
     per_movie = ratings.groupby("movieId").agg(**aggregates).reindex(movies["movieId"])
@@ -90,11 +76,7 @@ def interaction_tables(
 
 
 def genre_counts(movies: pd.DataFrame) -> pd.Series:
-    """Count movie memberships per real genre, excluding the missing sentinel.
-
-    A multi-genre movie contributes once to each genre. The total can therefore
-    exceed the size of the catalog. Repeated labels in one movie count once.
-    """
+    """Count the movies of each genre, ignoring missing and placeholder genres."""
     memberships = movies[["movieId", "genres"]].copy()
     memberships["genres"] = memberships["genres"].str.split("|")
     memberships = memberships.explode("genres")
@@ -111,28 +93,19 @@ def genre_counts(movies: pd.DataFrame) -> pd.Series:
 
 
 def summarize_dataset(tables: dict[str, pd.DataFrame]) -> dict[str, int | float]:
-    """Summarize ratings and TMDB coverage across the full movie catalog.
-
-    TMDB coverage means an ID is present in links.csv, not that its current
-    existence or correctness has been verified against the TMDB service.
-    """
+    """Summarize the ratings and the share of movies with a TMDB link."""
     movies, ratings, links = tables["movies"], tables["ratings"], tables["links"]
     num_movies = len(movies)
     num_users = ratings["userId"].nunique()
     num_ratings = len(ratings)
-    if num_movies == 0 or num_ratings == 0 or num_users == 0:
-        raise ValueError(
-            "The exploration summary requires nonempty movies and ratings."
-        )
     movies_with_links = movies.merge(
         links, on="movieId", how="left", validate="one_to_one"
     )
-    tmdb_coverage = movies_with_links["tmdbId"].notna().mean()
     return {
         "num_movies": num_movies,
         "num_users": int(num_users),
         "num_ratings": num_ratings,
         "avg_ratings_per_user": num_ratings / num_users,
         "avg_ratings_per_movie": num_ratings / num_movies,
-        "tmdb_coverage": float(tmdb_coverage),
+        "tmdb_coverage": float(movies_with_links["tmdbId"].notna().mean()),
     }

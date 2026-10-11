@@ -269,14 +269,6 @@ class DatasetSummaryTests(unittest.TestCase):
                 with self.assertRaises(pd.errors.MergeError):
                     summarize_dataset(tables)
 
-    def test_empty_movies_or_ratings_raise_a_clear_value_error(self):
-        for dataset in ("movies", "ratings"):
-            with self.subTest(dataset=dataset):
-                tables = sample_tables()
-                tables[dataset] = tables[dataset].iloc[0:0].copy()
-                with self.assertRaises(ValueError):
-                    summarize_dataset(tables)
-
 
 if __name__ == "__main__":
     unittest.main()

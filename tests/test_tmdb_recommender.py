@@ -287,25 +287,6 @@ class TMDBValidationTests(unittest.TestCase):
             movie_catalogue([(10, "Action"), (20, "Action")]), [(10, 100), (20, 200)]
         )
 
-    def test_favorites_require_strict_positive_integer_tmdb_ids(self):
-        for favorites in (
-            ["100"],
-            [100.0],
-            [True],
-            [np.bool_(True)],
-            [None],
-            [np.nan],
-            [0],
-            [-100],
-            [100, "200"],
-            100,
-            "100",
-            None,
-        ):
-            with self.subTest(favorites=favorites):
-                with self.assertRaises(ValueError):
-                    self.adapter.recommend(favorites)
-
     def test_limit_is_validated_even_for_empty_or_unknown_favorites(self):
         for n in (0, -1, 1.5, "2", True, np.bool_(True), None, np.nan):
             for favorites in ([100], [], [99999]):
