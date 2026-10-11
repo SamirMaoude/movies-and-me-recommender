@@ -1,4 +1,4 @@
-# Comparaison des premières recommandations
+# Comparaison de la popularité et des genres
 
 Les modèles de popularité et de genres ont été évalués sur la validation
 MovieLens, avec les dates de `config/evaluation.json`. Une note d'au moins
@@ -29,8 +29,8 @@ Recall@10 est le nombre de cibles retrouvées dans les dix premiers résultats,
 divisé par le nombre de cibles attendues. NDCG@10 utilise des gains binaires,
 pondérés par `1 / log2(rang + 1)`, puis divisés par le gain du classement
 idéal de `min(10, nombre de cibles)` films. Les moyennes donnent le même
-poids à chaque utilisateur. Le dénominateur reste entier même si un modèle
-renvoie moins de dix films.
+poids à chaque utilisateur. Renvoyer moins de dix films ne réduit pas le
+nombre de cibles attendu.
 
 ## Résultats
 
@@ -83,6 +83,6 @@ Depuis la racine du dépôt, sous PowerShell :
 Le [rapport JSON](baseline_comparison.json) conserve les métriques exactes,
 les recommandations et les comptes par utilisateur, les règles, les dates,
 le seuil, les versions de Python et des bibliothèques, et les empreintes
-SHA-256 de `ratings.csv`, `links.csv` et `movies.csv`. Aucune donnée brute
-ni aucun notebook n'est modifié par la commande. ALS sera comparé à ces
-références lors de la phase 5.
+SHA-256 de `ratings.csv`, `links.csv` et `movies.csv`.
+La [comparaison ALS](als_comparison.md) reprend le même protocole et les
+mêmes références.

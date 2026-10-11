@@ -2,7 +2,6 @@
 
 from dataclasses import FrozenInstanceError
 import json
-import os
 from pathlib import Path
 import subprocess
 import sys
@@ -294,7 +293,6 @@ class ModelRegistryTests(unittest.TestCase):
             "cwd": Path(__file__).resolve().parents[1],
             "capture_output": True,
             "text": True,
-            "env": {**os.environ, "MLFLOW_DISABLE_AGENT_HINT": "1"},
             "timeout": 60,
         }
         registered_process = subprocess.run(

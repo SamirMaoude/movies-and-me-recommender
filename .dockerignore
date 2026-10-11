@@ -1,0 +1,15 @@
+# Only the serving code and its dependencies enter the build context.
+**
+!Dockerfile
+!requirements-api.txt
+!src/
+!src/__init__.py
+!src/api/
+!src/api/*.py
+!src/data/
+!src/data/__init__.py
+!src/data/id_mapper.py
+!src/models/
+!src/models/__init__.py
+!src/models/collaborative.py
+!src/models/registry.py

@@ -1,0 +1,26 @@
+name: movies-me-recommender
+
+services:
+  api:
+    image: movies-me-api:local
+    build:
+      context: .
+    init: true
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      MODEL_URI: /models/als
+    volumes:
+      - type: bind
+        source: ./artifacts/dvc/model
+        target: /models/als
+        read_only: true
+        bind:
+          create_host_path: false
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true

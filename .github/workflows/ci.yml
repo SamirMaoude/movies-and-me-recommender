@@ -1,0 +1,87 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main, chore/docker, ci/github-actions]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHONUNBUFFERED: "1"
+  OPENBLAS_NUM_THREADS: "1"
+  OMP_NUM_THREADS: "1"
+  MKL_NUM_THREADS: "1"
+
+jobs:
+  tests:
+    name: Python checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            requirements-api.txt
+            requirements-ci.txt
+      - name: Install test dependencies
+        run: |
+          python -m pip install -r requirements-ci.txt
+          python -m pip check
+      - name: Check Python errors
+        run: python -m ruff check src tests scripts --select E9,F63,F7,F82
+      - name: Check smoke script formatting
+        run: python -m ruff format --check scripts
+      - name: Run unit tests
+        run: python -m unittest discover -s tests -v
+
+  docker:
+    name: Docker API smoke test
+    needs: tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            requirements-api.txt
+            requirements-ci.txt
+      - name: Install dependencies for the synthetic model
+        run: python -m pip install -r requirements-api.txt
+      - name: Train a small model for the API check
+        run: python scripts/create_smoke_model.py --output "$RUNNER_TEMP/smoke-model"
+      - name: Build the CPU image
+        run: docker build --pull --tag movies-me-api:ci .
+      - name: Start the API with the synthetic model
+        run: |
+          docker run --detach --name movies-me-api-ci \
+            --publish 127.0.0.1:8000:8000 \
+            --env MODEL_URI=/models/current \
+            --mount "type=bind,source=$RUNNER_TEMP/smoke-model,target=/models/current,readonly" \
+            movies-me-api:ci
+      - name: Check the running API
+        run: python scripts/check_api.py --url http://127.0.0.1:8000
+      - name: Show logs and remove the test container
+        if: always()
+        run: |
+          if docker inspect movies-me-api-ci > /dev/null 2>&1; then
+            docker logs movies-me-api-ci || true
+            docker rm --force movies-me-api-ci
+          fi
