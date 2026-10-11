@@ -5,12 +5,12 @@ le modèle ALS fourni par `implicit` pour se concentrer sur le MLOps :
 entraînement reproductible, évaluation, déploiement et suivi en production.
 L'API utilisera des identifiants TMDB.
 
-La [feuille de route](ROADMAP.md) décrit cette direction. Les phases 1 à 5
+La [feuille de route](ROADMAP.md) décrit cette direction. Les phases 1 à 6
 sont réalisées : ALS est entraîné, comparé aux références et rechargeable
-à partir de ses fichiers. La phase 6 est en cours : MLflow conserve les essais,
-leurs modèles et les informations sur le code, les données et l'environnement.
-Le registre de modèles reste à intégrer. Le modèle par genres reste disponible
-pour les comparaisons.
+à partir de ses fichiers ou d'une version du registre MLflow. Chaque essai
+conserve les informations sur le code, les données et l'environnement.
+La prochaine étape est le versionnement des données et du pipeline avec DVC.
+Le modèle par genres reste disponible pour les comparaisons.
 
 ## Phase 1 : exploration de MovieLens
 
@@ -527,9 +527,72 @@ classements peuvent être comparés entre exécutions ; les identifiants des run
 et les durées d'entraînement varient. Le modèle reste entraîné sur
 l'apprentissage uniquement, et le test final reste à l'écart.
 
-La phase 6 reste en cours. Les prochaines étapes sont l'enregistrement d'une
-version dans le Model Registry avec un alias `champion`, puis un chargement
-commun qui récupère cette version et vérifie ses recommandations.
+### Enregistrer une version du modèle
+
+[src/models/registry.py](src/models/registry.py) utilise les fichiers du modèle
+déjà présents dans un run : aucun nouvel entraînement n'est lancé.
+Dans les commandes suivantes, remplacer `RUN_ID_DU_RAPPORT` par la valeur de
+`selection.selected_run_id` du rapport produit plus haut. Garder la même
+variable `MLFLOW_TRACKING_URI` dans le terminal.
+
+```bat
+python -m src.models.registry register --run-id RUN_ID_DU_RAPPORT --name movies-and-me-als --alias champion
+```
+
+La commande affiche un JSON avec `name`, `version`, `run_id`, `model_uri` et
+`alias`. L'URI retournée désigne une version exacte, par exemple
+`models:/movies-and-me-als/1`. Relancer l'enregistrement du même run sous le
+même nom réutilise cette version.
+
+Sans `--alias champion`, la commande enregistre seulement une version
+candidate. L'option déplace explicitement l'alias après avoir rechargé la
+version et comparé ses recommandations à celles du modèle source. Les IDs
+doivent correspondre et les scores sont comparés avec `rtol=1e-6`,
+`atol=1e-7`. Si la vérification échoue, l'alias existant reste en place.
+
+Une version sert de référence fixe ; l'alias `champion` peut désigner une
+autre version plus tard. Un service doit donc conserver le numéro exact
+chargé. Cette vérification contrôle le rechargement du modèle ; la décision
+de qualité et la promotion automatique appartiennent à la phase 12.
+
+### Charger depuis le registre et recommander
+
+Dans le même terminal :
+
+```bat
+python -m src.models.registry recommend --model-uri models:/movies-and-me-als@champion --favorites 27205 157336 155 603 --n 10
+```
+
+Le résultat JSON contient le nom, la version exacte, le `run_id`, l'URI du
+modèle, la méthode (`als` ou `popularity`) et les recommandations TMDB.
+
+Le même chargement est disponible en Python :
+
+```python
+from src.models.registry import load_recommender
+
+loaded = load_recommender("models:/movies-and-me-als@champion")
+print(loaded.name, loaded.version, loaded.run_id, loaded.model_uri)
+result = loaded.recommend_with_method([27205, 157336, 155, 603], n=10)
+print(result)
+```
+
+`load_recommender(...)` accepte aussi un dossier local, `runs:/RUN_ID/model`
+ou `models:/movies-and-me-als/1` pour choisir une version précise. L'alias est
+résolu une seule fois au chargement ; les recommandations suivantes utilisent
+cette même version. `loaded.model` donne accès à l'`ImplicitRecommender`
+chargé. Les paramètres Python `tracking_uri` et `registry_uri`, ou les options
+CLI `--tracking-uri` et `--registry-uri`, permettent de préciser les services.
+
+Le registre conserve le dossier ALS natif et ses quatre fichiers. Le
+chargement utilise ce module du projet ; aucun modèle `pyfunc` ni service
+MLflow Serving n'est créé. La future API FastAPI pourra réutiliser ce chargeur.
+
+La version locale **1** de `movies-and-me-als` a été enregistrée avec l'alias
+`champion`. Les tests de [tests/test_registry.py](tests/test_registry.py)
+couvrent le chargement local et distant, l'enregistrement, les changements
+d'alias, les recommandations et le rejet des modèles incohérents ou issus
+d'un run inachevé. La phase 6 est terminée ; la phase 7 portera sur DVC.
 
 ## Reproduire l'analyse
 
