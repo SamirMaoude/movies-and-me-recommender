@@ -3,14 +3,15 @@
 Backend/ML séparé de l'application Movies-And-Me. Le projet utilise
 le modèle ALS fourni par `implicit` pour se concentrer sur le MLOps :
 entraînement reproductible, évaluation, déploiement et suivi en production.
-L'API utilisera des identifiants TMDB.
+L'API reçoit les favoris et renvoie des recommandations avec des IDs TMDB.
 
-La [feuille de route](ROADMAP.md) décrit cette direction. Les phases 1 à 7
+La [feuille de route](ROADMAP.md) décrit cette direction. Les phases 1 à 8
 sont réalisées : ALS est entraîné, comparé aux références et rechargeable
 à partir de ses fichiers ou d'une version du registre MLflow. Chaque essai
 conserve les informations sur le code, les données et l'environnement.
 Les données et les sorties du pipeline sont versionnées avec DVC et leur
-récupération depuis S3 est vérifiée. La suite est l'API FastAPI.
+récupération depuis S3 est vérifiée. L'API FastAPI sert une version précise
+du modèle. La suite porte sur Docker et l'intégration continue.
 Le modèle par genres reste disponible pour les comparaisons.
 
 ## Phase 1 : exploration de MovieLens
@@ -751,7 +752,132 @@ clone, les états Git et DVC sont propres.
 
 L'exécution sur une autre machine et dans la CI n'a pas encore été testée.
 La connexion AWS de la CI sera traitée en phase 9. La phase 7 est intégrée
-dans `main`. La prochaine étape est l'API FastAPI.
+dans `main`.
+
+## Phase 8 : API de recommandations avec FastAPI
+
+La phase 8 est terminée. [src/api/main.py](src/api/main.py)
+expose les routes HTTP ; [src/api/service.py](src/api/service.py) réutilise
+le chargeur de modèle et les recommandations existantes. Les formats des
+requêtes et des réponses sont définis dans
+[src/api/schemas.py](src/api/schemas.py).
+
+### Démarrer l'API
+
+Depuis la racine du dépôt, dans **cmd**, avec `.venv` activé :
+
+```bat
+python -m pip install -r requirements.txt
+set "MODEL_URI=models:/movies-and-me-als/1"
+set "MLFLOW_TRACKING_URI=sqlite:///mlruns.db"
+python -m uvicorn src.api.main:app --host 127.0.0.1 --port 8000 --workers 1
+```
+
+`MODEL_URI` désigne ici la version **1** du registre local MLflow. C'est
+aussi la valeur utilisée si cette variable n'est pas définie. Pour servir
+une autre version, changer son numéro avant le démarrage. La base MLflow
+et les fichiers du modèle doivent être accessibles au moment du chargement.
+`MLFLOW_REGISTRY_URI` peut désigner un registre distinct ; sinon le registre
+utilise le même service que le suivi MLflow.
+
+L'API charge le modèle une fois au démarrage de chaque processus. Un modèle
+absent ou incohérent empêche le démarrage. Cette première configuration
+utilise un seul processus ; le service protège les appels simultanés au
+modèle partagé. Le chargement suit le
+[cycle de vie FastAPI](https://fastapi.tiangolo.com/advanced/events/).
+
+La documentation interactive est disponible à
+<http://127.0.0.1:8000/docs>. Elle permet de saisir une requête, de l'envoyer
+et de consulter la réponse. `Ctrl+C` arrête le serveur.
+
+Pour utiliser le modèle du pipeline DVC, récupérer son dossier si nécessaire,
+puis choisir ce chemin avant de lancer le même serveur :
+
+```bat
+dvc pull artifacts/dvc/model -r cloud
+set "MODEL_URI=artifacts/dvc/model"
+python -m uvicorn src.api.main:app --host 127.0.0.1 --port 8000 --workers 1
+```
+
+Cette récupération utilise la connexion AWS décrite en phase 7. Une fois
+le dossier local chargé, les recommandations utilisent les fichiers en
+mémoire : elles ne demandent ni CSV, ni appel TMDB, ni connexion AWS.
+Un dossier local conserve son `run_id`, mais ses champs `name` et `version`
+valent `null` : le modèle du pipeline n'est pas enregistré automatiquement
+dans le Model Registry.
+
+### Appeler les routes
+
+| Route | Rôle |
+|---|---|
+| `GET /health` | Répondre `200` avec `{"status":"ok"}` lorsque le modèle est prêt |
+| `GET /model/info` | Retourner `name`, `version`, `run_id` et `model_uri` du modèle chargé |
+| `POST /recommendations` | Classer les films à partir des favoris TMDB et retourner les recommandations |
+
+Le corps de `POST /recommendations` est un objet JSON :
+
+```json
+{
+  "favorite_movie_ids": [27205, 157336, 155, 603],
+  "n": 10
+}
+```
+
+`favorite_movie_ids` est obligatoire et accepte jusqu'à **500 IDs TMDB**,
+chacun étant un nombre entier strictement positif. La liste peut être vide.
+`n` vaut **10** par défaut et doit être un entier compris entre **1 et 50**.
+Les nombres décimaux, les chaînes de caractères, les booléens et les champs
+supplémentaires sont refusés, avec une réponse HTTP **422**. Une API dont le
+modèle n'est pas prêt répond **503** à la vérification de disponibilité.
+
+Dans un deuxième terminal **cmd** :
+
+```bat
+curl http://127.0.0.1:8000/health
+curl http://127.0.0.1:8000/model/info
+curl -X POST http://127.0.0.1:8000/recommendations -H "Content-Type: application/json" -d "{\"favorite_movie_ids\":[27205,157336,155,603],\"n\":10}"
+```
+
+La réponse contient trois champs :
+
+- `recommendations` : une liste d'objets avec `tmdb_id` et `score` ;
+- `method` : `als`, ou `popularity` lorsqu'aucun favori n'est connu ;
+- `model` : le nom, la version exacte, le `run_id` et l'URI du modèle chargé.
+
+Les favoris répétés comptent une seule fois et les IDs inconnus sont ignorés.
+Une liste vide ou entièrement inconnue utilise la popularité apprise à
+l'entraînement. Les favoris connus sont exclus des résultats. `n` fixe une
+limite : la réponse peut contenir moins de films si le catalogue ne suffit
+pas. Les scores servent au classement ; ils ne sont pas des probabilités.
+Aucun entraînement n'est lancé pendant une requête.
+
+### Vérifier le service et l'API
+
+Les tests de [tests/test_recommendation_service.py](tests/test_recommendation_service.py)
+et [tests/test_api.py](tests/test_api.py) utilisent de petits modèles ALS
+locaux, sans accès cloud :
+
+```bat
+python -m unittest discover -s tests -p "test_recommendation_service.py" -v
+python -m unittest discover -s tests -p "test_api.py" -v
+```
+
+Les 25 tests du service et de l'API passent. Ils couvrent les requêtes
+normales, les listes vides, les favoris inconnus, les entrées incorrectes,
+les modèles absents ou corrompus et les appels simultanés. Les résultats
+correspondent aux appels directs et les facteurs entraînés restent
+inchangés. La suite complète de **241 tests** passe depuis un clone propre.
+
+Un essai HTTP avec Uvicorn et la version 1 du registre a aussi vérifié les
+trois routes, dix recommandations identiques au calcul direct, le recours
+à la popularité, les erreurs 422 et la page `/docs`. Il n'a créé aucun run
+MLflow ni changé le registre.
+
+Depuis un autre clone avec un cache vide sur ce PC Windows, seul le dossier
+modèle a été récupéré depuis S3. L'API a répondu avec dix recommandations,
+sans CSV et sans accès à un suivi ou un registre MLflow. Les sorties DVC
+ont été recalculées pour les nouvelles dépendances, avec les mêmes
+métriques, puis envoyées vers S3. La version `champion` est conservée.
 
 ## Reproduire l'analyse
 
