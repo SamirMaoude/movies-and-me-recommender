@@ -150,7 +150,11 @@ il faut alors le supprimer, puis le recréer de cette manière.
 - AWS : un fournisseur OIDC `token.actions.githubusercontent.com` (audience
   `sts.amazonaws.com`) et le rôle `movies-and-me-recommender-dvc-read`.
   Ce rôle autorise seulement `s3:GetObject` sur
-  `movies-and-me/movies-and-me-recommender/*` et `s3:ListBucket` sur ce préfixe.
+  `movies-and-me/movies-and-me-recommender/*`, `s3:ListBucket` sur ce préfixe,
+  et `ecr-public:GetAuthorizationToken` avec `sts:GetServiceBearerToken`. Ces
+  deux dernières permissions servent à télécharger l'image de Lambda Web
+  Adapter avec un compte : sans authentification, Amazon ECR Public limite les
+  données par adresse IP, et une machine GitHub a déjà atteint cette limite.
 
 Ce dépôt utilise le format immuable du sujet OIDC, qui contient les identifiants
 du compte et du dépôt GitHub. La politique de confiance du rôle impose :
