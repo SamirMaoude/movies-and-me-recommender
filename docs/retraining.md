@@ -49,7 +49,7 @@ Les règles sont dans la section `promotion` de `params.yaml` :
 | Utilisateurs de validation | Au moins 1 000 |
 | NDCG@10 | Au plus 0,002 sous le modèle en service |
 | Recall@10 | Au plus 0,002 sous le modèle en service |
-| Couverture du catalogue dans les top 10 | Au moins 90 % de celle du modèle en service |
+| Couverture du catalogue dans les top 10 | Au moins 75 % de celle du modèle en service |
 | Temps de réponse p95 | Au plus 60 ms, mesuré dans le job sur 200 profils de validation |
 
 Ces seuils viennent des résultats observés sur MovieLens 32M : entraînement
@@ -74,6 +74,22 @@ au double du modèle en service : 28,6 ms contre 12,3 ms pour un modèle qui ne
 classait que 5 000 films, alors qu'il gagnait sur tous les autres contrôles.
 Le plafond de 60 ms laisse environ deux fois ce temps, qui variait de 14 à
 24 ms d'une exécution à l'autre sur un portable.
+
+La couverture n'a varié que de 0,5 % entre graines, mais `alpha` la fait varier
+nettement. Un `alpha` plus faible donne des recommandations plus précises et
+plus souvent populaires :
+
+| `alpha` | NDCG@10 | Recall@10 | Au moins un bon film dans le top 10 | Couverture |
+|---|---|---|---|---|
+| 20 | 0,0728 | 0,0414 | 31,6 % | 4,7 % |
+| 10 | 0,0775 | 0,0454 | 33,5 % | 3,7 % |
+| 5 | 0,0792 | 0,0445 | 33,1 % | 2,9 % |
+| 2 | 0,0776 | 0,0444 | 33,0 % | 2,1 % |
+
+Le seuil de 75 % est un choix : il accepte jusqu'à un quart de diversité en moins
+pour un gain de précision. `alpha` 10, retenu pour le meilleur Recall et la plus
+grande part d'utilisateurs servis, passe ; `alpha` 5 et 2, qui perdent 40 % et
+56 % de couverture, sont refusés. La popularité seule couvre 0,26 % du catalogue.
 
 Avec l'ancien jeu (ml-latest-small), la validation ne comptait que
 20 utilisateurs : NDCG@10 variait de 0,029 à 0,062 selon la graine, et l'écart

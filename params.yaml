@@ -39,8 +39,10 @@ promotion:
   ndcg_tolerance: 0.002
   recall_tolerance: 0.002
   # Top-10 catalog coverage varied by 0.5 % between seeds; popularity and a
-  # degraded model reach about 5 % of the ALS coverage.
-  min_coverage_ratio: 0.9
+  # degraded model reach about 5 % of the ALS coverage. Lowering alpha trades
+  # coverage for accuracy (alpha 10: -23 % coverage, +6.5 % NDCG@10); up to a
+  # quarter less coverage is accepted, which still refuses alpha 5 (-40 %).
+  min_coverage_ratio: 0.75
   # p95 of one request, timed in the job on 200 validation profiles. The 32M
   # model measured 28.6 ms on a GitHub runner and 14 to 24 ms between runs on
   # a laptop; the budget leaves about twice that.
