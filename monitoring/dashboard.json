@@ -1,0 +1,160 @@
+{
+  "start": "-PT24H",
+  "periodOverride": "inherit",
+  "widgets": [
+    {
+      "type": "metric",
+      "x": 0,
+      "y": 0,
+      "width": 8,
+      "height": 6,
+      "properties": {
+        "title": "Requêtes live et erreurs HTTP",
+        "region": "eu-north-1",
+        "view": "timeSeries",
+        "stat": "Sum",
+        "period": 300,
+        "metrics": [
+          ["AWS/Lambda", "UrlRequestCount", "FunctionName", "movies-and-me-recommender", "Resource", "movies-and-me-recommender:live", {"label": "Requêtes"}],
+          [".", "Url4xxCount", ".", ".", ".", ".", {"label": "Erreurs 4xx"}],
+          [".", "Url5xxCount", ".", ".", ".", ".", {"label": "Erreurs 5xx"}]
+        ]
+      }
+    },
+    {
+      "type": "metric",
+      "x": 8,
+      "y": 0,
+      "width": 8,
+      "height": 6,
+      "properties": {
+        "title": "Latence live (ms)",
+        "region": "eu-north-1",
+        "view": "timeSeries",
+        "period": 300,
+        "metrics": [
+          ["AWS/Lambda", "UrlRequestLatency", "FunctionName", "movies-and-me-recommender", "Resource", "movies-and-me-recommender:live", {"stat": "p50", "label": "Médiane"}],
+          ["...", {"stat": "p95", "label": "p95"}],
+          ["...", {"stat": "Maximum", "label": "Maximum"}]
+        ]
+      }
+    },
+    {
+      "type": "metric",
+      "x": 16,
+      "y": 0,
+      "width": 8,
+      "height": 6,
+      "properties": {
+        "title": "Charge et mémoire (toute la fonction)",
+        "region": "eu-north-1",
+        "view": "timeSeries",
+        "period": 300,
+        "metrics": [
+          ["AWS/Lambda", "ConcurrentExecutions", "FunctionName", "movies-and-me-recommender", {"stat": "Maximum", "label": "Instances occupées"}],
+          [".", "Throttles", ".", ".", {"stat": "Sum", "label": "Requêtes rejetées (429)"}],
+          ["MoviesAndMe", "MaxMemoryUsed", {"stat": "Maximum", "label": "Mémoire max (Mo)", "yAxis": "right"}]
+        ],
+        "yAxis": {"right": {"min": 0, "max": 512}}
+      }
+    },
+    {
+      "type": "metric",
+      "x": 0,
+      "y": 6,
+      "width": 8,
+      "height": 6,
+      "properties": {
+        "title": "Favoris par requête (live)",
+        "region": "eu-north-1",
+        "view": "timeSeries",
+        "period": 3600,
+        "metrics": [
+          ["MoviesAndMe", "Favorites", "Alias", "live", {"stat": "Average", "label": "Favoris distincts (moyenne)"}],
+          ["...", {"stat": "SampleCount", "label": "Requêtes de recommandations", "yAxis": "right"}]
+        ]
+      }
+    },
+    {
+      "type": "metric",
+      "x": 8,
+      "y": 6,
+      "width": 8,
+      "height": 6,
+      "properties": {
+        "title": "Part de favoris inconnus (live)",
+        "region": "eu-north-1",
+        "view": "timeSeries",
+        "period": 3600,
+        "metrics": [
+          [{"expression": "unknown / favorites", "label": "Favoris absents du catalogue", "id": "share"}],
+          ["MoviesAndMe", "UnknownFavorites", "Alias", "live", {"stat": "Sum", "id": "unknown", "visible": false}],
+          [".", "Favorites", ".", ".", {"stat": "Sum", "id": "favorites", "visible": false}]
+        ],
+        "yAxis": {"left": {"min": 0, "max": 1}}
+      }
+    },
+    {
+      "type": "metric",
+      "x": 16,
+      "y": 6,
+      "width": 8,
+      "height": 6,
+      "properties": {
+        "title": "Repli sur la popularité et réponses vides (live)",
+        "region": "eu-north-1",
+        "view": "timeSeries",
+        "period": 3600,
+        "metrics": [
+          ["MoviesAndMe", "PopularityFallback", "Alias", "live", {"stat": "Average", "label": "Part des requêtes servies par popularité"}],
+          [".", "EmptyRecommendations", ".", ".", {"stat": "Average", "label": "Part des réponses vides"}]
+        ],
+        "yAxis": {"left": {"min": 0, "max": 1}}
+      }
+    },
+    {
+      "type": "log",
+      "x": 0,
+      "y": 12,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "Versions qui ont servi des recommandations",
+        "region": "eu-north-1",
+        "view": "table",
+        "query": "SOURCE '/aws/lambda/movies-and-me-recommender' | filter event = \"recommendation\" | stats count(*) as requests, max(@timestamp) as last_seen by Alias, lambda_version, revision, model_run_id | sort last_seen desc"
+      }
+    },
+    {
+      "type": "log",
+      "x": 12,
+      "y": 12,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "Erreurs de l'application",
+        "region": "eu-north-1",
+        "view": "table",
+        "query": "SOURCE '/aws/lambda/movies-and-me-recommender' | filter @message like /ERROR|Traceback|Task timed out|Runtime\\./ | fields @timestamp, @logStream, @message | sort @timestamp desc | limit 20"
+      }
+    },
+    {
+      "type": "alarm",
+      "x": 0,
+      "y": 18,
+      "width": 24,
+      "height": 3,
+      "properties": {
+        "title": "Alarmes",
+        "alarms": [
+          "arn:aws:cloudwatch:eu-north-1:ACCOUNT_ID:alarm:movies-and-me-live-5xx",
+          "arn:aws:cloudwatch:eu-north-1:ACCOUNT_ID:alarm:movies-and-me-throttles",
+          "arn:aws:cloudwatch:eu-north-1:ACCOUNT_ID:alarm:movies-and-me-live-latency",
+          "arn:aws:cloudwatch:eu-north-1:ACCOUNT_ID:alarm:movies-and-me-live-traffic",
+          "arn:aws:cloudwatch:eu-north-1:ACCOUNT_ID:alarm:movies-and-me-memory",
+          "arn:aws:cloudwatch:eu-north-1:ACCOUNT_ID:alarm:movies-and-me-unknown-favorites"
+        ]
+      }
+    }
+  ]
+}

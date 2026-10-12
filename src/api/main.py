@@ -8,6 +8,7 @@ from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 
+from src.api import usage
 from src.api.schemas import (
     HealthResponse,
     ModelInfo,
@@ -59,6 +60,8 @@ def create_app(
             )
             # An image built without VCS_REF has an empty APP_REVISION.
             application.state.revision = _setting(revision, "APP_REVISION") or None
+            # Only Lambda sets this variable; elsewhere no usage record is written.
+            application.state.lambda_version = os.getenv("AWS_LAMBDA_FUNCTION_VERSION")
             yield
         finally:
             application.state.service = None
@@ -66,6 +69,7 @@ def create_app(
     application = FastAPI(title="Movies & Me Recommender", lifespan=lifespan)
     application.state.service = None
     application.state.revision = None
+    application.state.lambda_version = None
 
     @application.get("/health", response_model=HealthResponse)
     def health(service: ReadyService) -> HealthResponse:
@@ -88,16 +92,33 @@ def create_app(
     def recommendations(
         request: RecommendationRequest,
         service: ReadyService,
+        http_request: Request,
     ) -> RecommendationResponse:
         """Recommend movies from a list of favorite TMDB IDs."""
         try:
-            return service.recommend(request.favorite_movie_ids, n=request.n)
+            response = service.recommend(request.favorite_movie_ids, n=request.n)
         except Exception:
             logger.exception("Recommendation computation failed.")
             raise HTTPException(
                 status_code=500,
                 detail="Recommendation computation failed.",
             ) from None
+        state = http_request.app.state
+        if state.lambda_version is not None:
+            favorites = request.favorite_movie_ids
+            context = http_request.headers.get("x-amzn-lambda-context")
+            record = usage.usage_record(
+                favorites=len(set(favorites)),
+                known=service.count_known(favorites),
+                method=response.method,
+                returned=len(response.recommendations),
+                alias=usage.lambda_alias(context),
+                revision=state.revision,
+                model_run_id=service.model_info.run_id,
+                lambda_version=state.lambda_version,
+            )
+            usage.log_usage(record)
+        return response
 
     return application
 

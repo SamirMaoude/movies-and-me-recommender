@@ -125,6 +125,10 @@ class ImplicitRecommender:
     ) -> list[dict[str, int | float]]:
         return self.recommend_with_method(favorite_tmdb_ids, n)["recommendations"]
 
+    def count_known(self, favorite_tmdb_ids: Iterable[int]) -> int:
+        """Count the distinct favorites that belong to the training catalog."""
+        return sum(tmdb in self._item_indices for tmdb in set(favorite_tmdb_ids))
+
     def recommend_with_method(
         self, favorite_tmdb_ids: Iterable[int], n: int = 10
     ) -> dict:

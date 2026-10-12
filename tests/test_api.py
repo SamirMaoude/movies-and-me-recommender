@@ -1,10 +1,13 @@
 """Exercise the HTTP contract and startup with a local ALS bundle."""
 
+import io
+import json
 import os
 import shutil
 import tempfile
 import unittest
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -294,6 +297,44 @@ class RecommendationAPITests(unittest.TestCase):
             del os.environ["APP_REVISION"]
             with TestClient(self.app()) as client:
                 self.assertIsNone(client.get("/version").json()["revision"])
+
+    def test_lambda_requests_write_one_usage_record(self):
+        arn = "arn:aws:lambda:eu-north-1:123456789012:function:movies:live"
+        headers = {"x-amzn-lambda-context": json.dumps({"invoked_function_arn": arn})}
+        output = io.StringIO()
+        with (
+            patch.dict(os.environ, {"AWS_LAMBDA_FUNCTION_VERSION": "5"}),
+            TestClient(self.app(revision="c" * 40)) as client,
+            redirect_stdout(output),
+        ):
+            client.post(
+                "/recommendations",
+                json={"favorite_movie_ids": [100, 100, 999], "n": 3},
+                headers=headers,
+            )
+            client.post("/recommendations", json={"favorite_movie_ids": [0]})
+        lines = output.getvalue().splitlines()
+        self.assertEqual(len(lines), 1)
+        record = json.loads(lines[0])
+        self.assertIn("_aws", record)
+        self.assertEqual(record["Alias"], "live")
+        self.assertEqual(record["lambda_version"], "5")
+        self.assertEqual(record["revision"], "c" * 40)
+        self.assertEqual(record["model_run_id"], "a" * 32)
+        self.assertEqual(record["method"], "als")
+        self.assertEqual((record["Favorites"], record["UnknownFavorites"]), (2, 1))
+        self.assertEqual(record["recommendations"], 3)
+
+    def test_no_usage_record_outside_lambda(self):
+        output = io.StringIO()
+        with patch.dict(os.environ):
+            os.environ.pop("AWS_LAMBDA_FUNCTION_VERSION", None)
+            with TestClient(self.app()) as client, redirect_stdout(output):
+                response = client.post(
+                    "/recommendations", json={"favorite_movie_ids": [100]}
+                )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(output.getvalue(), "")
 
     def test_interactive_documentation_describes_the_routes(self):
         with TestClient(self.app()) as client:
