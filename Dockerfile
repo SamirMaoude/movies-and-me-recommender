@@ -22,7 +22,7 @@ RUN groupadd --system --gid 10001 app \
 COPY src/__init__.py src/files.py ./src/
 COPY src/api/ ./src/api/
 COPY src/data/__init__.py src/data/id_mapper.py ./src/data/
-COPY src/models/__init__.py src/models/collaborative.py src/models/registry.py ./src/models/
+COPY src/models/__init__.py src/models/collaborative.py src/models/registry.py src/models/serving.py ./src/models/
 
 USER 10001:10001
 EXPOSE 8000
@@ -32,18 +32,26 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=30s --retries=3 \
 
 CMD ["python", "-m", "uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
 
+# Requests only need the film factors and the catalog: the serving copy leaves
+# out the training users and matrix, about 80 % of a MovieLens 32M bundle.
+FROM api-base AS serving-bundle
+COPY --from=model catalog.json interactions.npz manifest.json model.npz /tmp/full/
+RUN python -m src.models.serving /tmp/full /tmp/serving
+
 FROM api-base AS deployment
 
 # AWS Lambda serves this image through the web adapter extension, which stays
-# inactive when the image runs anywhere else.
+# inactive when the image runs anywhere else. With asynchronous initialisation,
+# a start longer than Lambda's 10 s init limit finishes during the first request
+# instead of restarting the whole environment.
 COPY --from=public.ecr.aws/awsguru/aws-lambda-adapter:1.1.0@sha256:17cfd08eff1dfea3f6a9a1e9c65fdac80aa4919b6085e746615530f43f57d2f1 \
     /lambda-adapter /opt/extensions/lambda-adapter
 ENV AWS_LWA_PORT=8000 \
-    AWS_LWA_READINESS_CHECK_PATH=/health
+    AWS_LWA_READINESS_CHECK_PATH=/health \
+    AWS_LWA_ASYNC_INIT=true
 
 USER 0:0
-COPY --from=model --chown=0:0 \
-    catalog.json interactions.npz manifest.json model.npz /models/als/
+COPY --from=serving-bundle --chown=0:0 /tmp/serving/ /models/als/
 RUN chmod 0555 /models /models/als \
     && chmod 0444 /models/als/*
 USER 10001:10001

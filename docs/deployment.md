@@ -17,9 +17,13 @@ docker build --target deployment \
   --tag "movies-me-api:$REVISION" .
 ```
 
-Le modèle est transmis dans un contexte séparé. Seuls `catalog.json`,
-`interactions.npz`, `manifest.json` et `model.npz` sont copiés dans l'image.
-Les données brutes, les identifiants AWS et la base MLflow restent sur la machine.
+Le modèle est transmis dans un contexte séparé. L'image n'en garde que la copie
+de service, produite par `python -m src.models.serving` : les facteurs des films,
+le catalogue et la popularité. Les facteurs des utilisateurs d'entraînement et la
+matrice ne servent pas aux requêtes, qui recalculent le profil à partir des
+favoris envoyés. Pour MovieLens 32M, cette copie pèse 15 Mo au lieu de 93 Mo et
+donne les mêmes recommandations. Les données brutes, les identifiants AWS et la
+base MLflow restent sur la machine.
 
 La révision du code est enregistrée dans le label
 `org.opencontainers.image.revision`. Le manifeste du modèle conserve ses
@@ -231,9 +235,10 @@ son modèle. Elle reste utilisable tant que son image est dans ECR, qui garde le
 
 - La concurrence réservée limite la fonction à 2 instances. Une instance traite
   une requête à la fois ; au-delà, Lambda répond `429 Too Many Requests`.
-- Chaque instance dispose de 1 024 Mo et d'une part de CPU proportionnelle. Le
-  modèle entraîné sur MovieLens 32M ajoute environ 210 Mo en mémoire, soit
-  400 Mo environ au total. Une requête est interrompue après 15 secondes.
+- Chaque instance dispose de 1 024 Mo et d'une part de CPU proportionnelle. Avec
+  le bundle complet du modèle MovieLens 32M, l'API utilisait 582 Mo et démarrait
+  en 5,5 s ; la copie de service réduit le modèle chargé de 191 Mo à 26 Mo en
+  mesure locale. Une requête est interrompue après 15 secondes.
 - Une requête accepte au plus 500 favoris et `n` vaut au plus 50.
 - Les URL ne demandent pas d'authentification. Seuls `staging` et `live` en ont
   une, et les permissions publiques n'autorisent l'invocation que par ces URL.
