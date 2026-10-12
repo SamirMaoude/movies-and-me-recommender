@@ -76,6 +76,13 @@ Le modèle est monté depuis `artifacts/dvc/model/`.
 Pour construire une image avec le modèle inclus ou récupérer l'image publiée
 sur GHCR, suivre les [commandes de déploiement](docs/deployment.md).
 
+## API en ligne
+
+L'API est accessible en HTTPS sur
+<https://7xmkh4737vk2yl5ribrhs5tzei0azgje.lambda-url.eu-north-1.on.aws/>.
+Le [guide de déploiement](docs/deployment.md#api-https-sur-aws-lambda) décrit
+la mise en production, les limites et le retour à une version précédente.
+
 ## Entraînement
 
 Modifier [params.yaml](params.yaml), puis exécuter le pipeline :
@@ -127,7 +134,7 @@ python -m unittest discover -s tests -v
 Les tests utilisent des données synthétiques et ne nécessitent pas d'accès AWS.
 La [CI GitHub Actions](.github/workflows/ci.yml) exécute les tests, construit
 l'image Docker et vérifie l'API avec un modèle synthétique. Sur `main`, elle publie
-ensuite sur GHCR l'image vérifiée avec le modèle DVC.
+ensuite sur GHCR l'image vérifiée avec le modèle DVC, puis la déploie sur AWS Lambda.
 
 ## Analyses et résultats
 

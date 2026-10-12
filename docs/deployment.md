@@ -1,7 +1,8 @@
-# Image de déploiement
+# Déploiement
 
 L'image `deployment` contient le service et une copie du modèle DVC. Elle
 démarre sans volume externe. Le modèle est vérifié pendant la construction.
+La CI la publie sur GHCR, puis la déploie sur AWS Lambda derrière une URL HTTPS.
 
 ## Construire l'image
 
@@ -160,3 +161,150 @@ du compte et du dépôt GitHub. La politique de confiance du rôle impose :
 
 Le format réel du sujet se lit avec
 `GET /repos/SamirMaoude/movies-and-me-recommender/actions/oidc/customization/sub`.
+
+## API HTTPS sur AWS Lambda
+
+L'API publique tourne sur AWS Lambda, dans la région `eu-north-1`, avec l'image
+publiée sur GHCR : <https://7xmkh4737vk2yl5ribrhs5tzei0azgje.lambda-url.eu-north-1.on.aws/>
+
+```bash
+API=https://7xmkh4737vk2yl5ribrhs5tzei0azgje.lambda-url.eu-north-1.on.aws
+curl -s "$API/version"
+curl -s -X POST "$API/recommendations" \
+  -H "Content-Type: application/json" \
+  -d '{"favorite_movie_ids":[27205,157336,155,603],"n":10}'
+```
+
+`/version` donne le commit et le modèle servis. L'extension Lambda Web Adapter,
+incluse dans l'image, transmet les requêtes à Uvicorn. Après une période sans
+trafic, la première requête démarre une instance en 2 à 3 secondes.
+
+### Déploiement automatique
+
+Le job `deploy` suit `check-published` et ne tourne donc que sur `main`. Il :
+
+1. copie l'image de GHCR dans le dépôt ECR `movies-and-me-recommender`, avec le
+   commit comme tag, et vérifie que le digest n'a pas changé ;
+2. publie une nouvelle version de la fonction Lambda, dont la description donne
+   le commit et le `run_id` du modèle ;
+3. dirige l'alias `staging` vers cette version et vérifie son URL ;
+4. dirige l'alias `live` vers la même version et refait la vérification. Si elle
+   échoue, `live` revient à la version précédente et le job échoue.
+
+La vérification lance `scripts/check_api.py` sur l'URL publique : disponibilité,
+commit, `run_id`, recommandations ALS, repli sur la popularité et rejet des
+entrées invalides. Le résumé de l'exécution indique les versions servies et les
+dernières versions publiées.
+
+L'alias `staging` sert d'environnement de validation :
+<https://km3ssssewokd3jq4rh3kfavmni0ionmc.lambda-url.eu-north-1.on.aws/>. Les
+deux alias appartiennent à la même fonction et partagent ses limites.
+
+Ces étapes se trouvent dans `scripts/deploy_lambda.sh`. Pour voir l'état depuis
+un terminal disposant d'un accès AWS administrateur :
+
+```bash
+export AWS_PROFILE=movies-and-me AWS_REGION=eu-north-1
+scripts/deploy_lambda.sh status
+```
+
+### Revenir à une version précédente
+
+Dans l'onglet **Actions** de GitHub, lancer le workflow **Roll back** sur `main`
+avec le numéro de la version voulue, indiqué dans le résumé du déploiement. Le
+workflow dirige `live` vers cette version, puis vérifie que l'URL publique sert
+le commit et le `run_id` inscrits dans sa description. Relancer le workflow avec
+le numéro de la dernière version permet d'y revenir.
+
+Depuis un terminal disposant d'un accès AWS administrateur, la commande
+équivalente est :
+
+```bash
+scripts/deploy_lambda.sh promote 3
+```
+
+Le changement d'alias est immédiat : la version choisie reprend son image et
+son modèle. Elle reste utilisable tant que son image est dans ECR, qui garde les
+10 images les plus récentes.
+
+### Limites
+
+- La concurrence réservée limite la fonction à 2 instances. Une instance traite
+  une requête à la fois ; au-delà, Lambda répond `429 Too Many Requests`.
+- Chaque instance dispose de 512 Mo, dont 185 Mo environ sont utilisés, et d'une
+  part de CPU proportionnelle. Une requête est interrompue après 15 secondes.
+- Une requête accepte au plus 500 favoris et `n` vaut au plus 50.
+- Les URL ne demandent pas d'authentification. Seuls `staging` et `live` en ont
+  une, et les permissions publiques n'autorisent l'invocation que par ces URL.
+- Le rôle de déploiement ne peut changer ni la configuration de la fonction, ni
+  sa concurrence, ni ses URL, et ne peut pas supprimer d'image.
+- Le budget AWS `movies-and-me-monthly` (5 USD par mois) envoie un e-mail à 80 %
+  puis à 100 % des dépenses réelles.
+
+Pour couper l'API en cas d'abus, puis la rétablir :
+
+```bash
+aws lambda put-function-concurrency --function-name movies-and-me-recommender \
+  --reserved-concurrent-executions 0
+aws lambda put-function-concurrency --function-name movies-and-me-recommender \
+  --reserved-concurrent-executions 2
+```
+
+### Coûts
+
+Un usage modéré reste dans l'offre gratuite permanente de Lambda : un million de
+requêtes et 400 000 Go-secondes par mois. Chaque image occupe environ 175 Mo
+dans ECR ; les 10 images conservées coûtent moins de 0,20 USD par mois. Les logs
+sont gardés 14 jours.
+
+Au-delà, Lambda facture 0,20 USD par million de requêtes, plus le temps de
+calcul. Un flux continu de 100 requêtes par seconde coûterait environ 55 USD par
+mois. Le budget le signale dans la journée, et la commande ci-dessus arrête la
+dépense.
+
+### Ressources AWS
+
+- Dépôt ECR `movies-and-me-recommender` : tags immuables, analyse des images à
+  l'envoi, conservation des 10 images les plus récentes. Sa politique autorise
+  le service Lambda à lire les images pour les fonctions
+  `movies-and-me-recommender*` du compte.
+- Fonction Lambda `movies-and-me-recommender` : image x86_64, 512 Mo, délai de
+  15 secondes, concurrence réservée de 2. Son rôle d'exécution,
+  `movies-and-me-recommender-lambda`, peut seulement écrire dans le groupe de
+  logs `/aws/lambda/movies-and-me-recommender`.
+- Alias `staging` et `live`, chacun avec une URL de fonction sans
+  authentification.
+- Rôle `movies-and-me-recommender-deploy`, utilisé par le job `deploy` et par
+  le workflow **Roll back**. Il copie les images dans le dépôt ECR, met à jour
+  le code de la fonction, publie des versions et déplace les alias.
+- Environnement GitHub `production` : limité à `main`, il contient le secret
+  `AWS_DEPLOY_ROLE_ARN`.
+- Budget AWS `movies-and-me-monthly`.
+
+La politique de confiance du rôle de déploiement impose :
+
+```json
+"StringEquals": {
+  "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+  "token.actions.githubusercontent.com:sub": "repo:SamirMaoude@55006867/movies-and-me-recommender@1405677429:environment:production",
+  "token.actions.githubusercontent.com:ref": "refs/heads/main"
+}
+```
+
+Une URL publique demande deux permissions par alias. Si une URL doit être
+recréée :
+
+```bash
+for alias in staging live; do
+  aws lambda create-function-url-config --function-name movies-and-me-recommender \
+    --qualifier "$alias" --auth-type NONE
+  aws lambda add-permission --function-name movies-and-me-recommender \
+    --qualifier "$alias" --statement-id "public-url-$alias" \
+    --action lambda:InvokeFunctionUrl --principal "*" --function-url-auth-type NONE
+  aws lambda add-permission --function-name movies-and-me-recommender \
+    --qualifier "$alias" --statement-id "public-invoke-$alias" \
+    --action lambda:InvokeFunction --principal "*" --invoked-via-function-url
+done
+```
+
+Une URL recréée change d'adresse : mettre alors à jour ce document et le README.
