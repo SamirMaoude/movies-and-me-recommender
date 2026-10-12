@@ -1,5 +1,6 @@
 """Train implicit ALS on binary favorites and recommend from TMDB favorites."""
 
+import copy
 import tempfile
 from collections.abc import Iterable
 from dataclasses import asdict, dataclass
@@ -95,6 +96,7 @@ class ImplicitRecommender:
         training_data: TrainingData,
         config: ALSConfig,
         metadata: dict | None = None,
+        popularity: tuple[tuple[int, int], ...] | None = None,
     ):
         self.model = model
         self.training_data = training_data
@@ -104,7 +106,7 @@ class ImplicitRecommender:
             tmdb: index for index, tmdb in enumerate(training_data.tmdb_ids)
         }
         self._tmdb_array = np.asarray(training_data.tmdb_ids, dtype=np.int64)
-        self._ranking = _popularity(training_data)
+        self._ranking = _popularity(training_data) if popularity is None else popularity
 
     @classmethod
     def fit(
@@ -126,6 +128,26 @@ class ImplicitRecommender:
         self, favorite_tmdb_ids: Iterable[int], n: int = 10
     ) -> list[dict[str, int | float]]:
         return self.recommend_with_method(favorite_tmdb_ids, n)["recommendations"]
+
+    def serving_copy(self) -> "ImplicitRecommender":
+        """The same recommendations without the training users and matrix.
+
+        A request recalculates its profile from item factors, so neither the
+        user factors nor the interactions are read once the model is trained.
+        """
+        model = copy.copy(self.model)
+        model.user_factors = np.zeros((0, self.config.factors), dtype=np.float32)
+        model._XtX = None
+        items = len(self.training_data.tmdb_ids)
+        data = TrainingData(
+            csr_matrix((0, items), dtype=np.float32),
+            (),
+            self.training_data.tmdb_ids,
+            self.training_data.movie_ids,
+        )
+        return ImplicitRecommender(
+            model, data, self.config, self.metadata, popularity=self._ranking
+        )
 
     def count_known(self, favorite_tmdb_ids: Iterable[int]) -> int:
         """Count the distinct favorites that belong to the training catalog."""
@@ -246,6 +268,11 @@ class ImplicitRecommender:
             ):
                 if getattr(model, name).shape != (rows, config.factors):
                     raise ValueError(f"Artifact {name} do not match its dimensions.")
-            return cls(model, data, config, manifest["metadata"])
+            # The catalog keeps the popularity computed at training time, which a
+            # serving copy can no longer derive from its empty matrix.
+            popularity = tuple(
+                (int(tmdb), int(count)) for tmdb, count in catalog["popularity"]
+            )
+            return cls(model, data, config, manifest["metadata"], popularity)
         except (OSError, KeyError, TypeError, ValueError) as exc:
             raise ValueError(f"Invalid ALS artifact bundle: {exc}") from exc

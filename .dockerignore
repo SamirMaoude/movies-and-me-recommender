@@ -14,3 +14,4 @@
 !src/models/__init__.py
 !src/models/collaborative.py
 !src/models/registry.py
+!src/models/serving.py
