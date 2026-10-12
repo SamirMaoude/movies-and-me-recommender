@@ -82,6 +82,8 @@ L'API est accessible en HTTPS sur
 <https://7xmkh4737vk2yl5ribrhs5tzei0azgje.lambda-url.eu-north-1.on.aws/>.
 Le [guide de déploiement](docs/deployment.md#api-https-sur-aws-lambda) décrit
 la mise en production, les limites et le retour à une version précédente.
+Le tableau de bord, les alertes et le suivi des entrées sont présentés dans
+[docs/monitoring.md](docs/monitoring.md).
 
 ## Entraînement
 
