@@ -1,0 +1,47 @@
+name: Roll back
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Lambda version to serve on live (see the deployment summary)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  promote:
+    name: Serve a published version on live
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    # Deployments and rollbacks move the same aliases, one run at a time.
+    concurrency:
+      group: lambda-live
+      cancel-in-progress: false
+    environment:
+      name: production
+      url: ${{ steps.release.outputs.url }}
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - name: Get deployment access to AWS
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: eu-north-1
+          mask-aws-account-id: true
+      - name: Point live to the version and check it
+        env:
+          VERSION: ${{ inputs.version }}
+        run: scripts/deploy_lambda.sh promote "$VERSION"
+      - name: Record the release
+        id: release
+        run: |
+          echo "url=$(scripts/deploy_lambda.sh url live)" >> "$GITHUB_OUTPUT"
+          scripts/deploy_lambda.sh status >> "$GITHUB_STEP_SUMMARY"
