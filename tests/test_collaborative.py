@@ -331,6 +331,46 @@ class ALSArtifactTests(unittest.TestCase):
                     atol=1e-7,
                 )
 
+    def test_serving_copy_recommends_the_same_without_training_users(self):
+        target = self.bundle.parent / "serving"
+        self.recommender.serving_copy().save(target)
+        served = ImplicitRecommender.load(target)
+
+        self.assertEqual(served.model.user_factors.shape, (0, 4))
+        self.assertEqual(served.training_data.matrix.shape, (0, 5))
+        self.assertEqual(served.training_data.user_ids, ())
+        self.assertEqual(served.training_data.tmdb_ids, (100, 200, 300, 400, 500))
+        self.assertEqual(served.metadata, self.recommender.metadata)
+        np.testing.assert_array_equal(
+            served.model.item_factors, self.recommender.model.item_factors
+        )
+        for favorites in ([], [999], [100], [100, 300], [100, 200, 300, 400, 500]):
+            for n in (1, 3, 10):
+                with self.subTest(favorites=favorites, n=n):
+                    self.assertEqual(
+                        served.recommend_with_method(favorites, n),
+                        self.recommender.recommend_with_method(favorites, n),
+                    )
+                    self.assertEqual(
+                        served.count_known(favorites),
+                        self.recommender.count_known(favorites),
+                    )
+        # The training model keeps its users for later evaluation.
+        self.assertEqual(self.recommender.model.user_factors.shape, (3, 4))
+
+    def test_load_uses_the_popularity_stored_at_training_time(self):
+        restored = ImplicitRecommender.load(self.bundle)
+        self.assertEqual(restored._ranking, self.recommender._ranking)
+        catalog = self.read_json("catalog.json")
+        catalog["popularity"] = list(reversed(catalog["popularity"]))
+        self.write_json("catalog.json", catalog)
+        self.update_checksum("catalog.json")
+        reordered = ImplicitRecommender.load(self.bundle)
+        self.assertEqual(
+            reordered.recommend_with_method([])["recommendations"][0]["tmdb_id"],
+            catalog["popularity"][0][0],
+        )
+
     def test_save_refuses_existing_directories_without_changing_their_contents(self):
         before = {path.name: path.read_bytes() for path in self.bundle.iterdir()}
         with self.assertRaises(FileExistsError):
