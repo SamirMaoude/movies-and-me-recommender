@@ -159,8 +159,8 @@ stages:
       size: 38
     - path: src/models/collaborative.py
       hash: md5
-      md5: c2b2d36c5a61310be9522713c251689b
-      size: 10169
+      md5: d4df166cfc9cfd45d3ec56063ae31206
+      size: 11382
     - path: src/models/content_based.py
       hash: md5
       md5: 8ce8c26b0d9a23a5f07b67e41d6ca06a
@@ -194,24 +194,10 @@ stages:
         als:
           k: 10
           trials:
-          - name: als_32
-            factors: 32
-            regularization: 0.1
-            alpha: 20.0
-            iterations: 30
-            random_state: 42
-            num_threads: 1
-          - name: als_64
+          - name: als_64_alpha_10
             factors: 64
             regularization: 0.1
-            alpha: 20.0
-            iterations: 30
-            random_state: 42
-            num_threads: 1
-          - name: als_32_regularized
-            factors: 32
-            regularization: 1.0
-            alpha: 20.0
+            alpha: 10.0
             iterations: 30
             random_state: 42
             num_threads: 1
@@ -219,14 +205,14 @@ stages:
     outs:
     - path: artifacts/dvc/model
       hash: md5
-      md5: 86d99a23f5161131bcacc2a34ab3f2b3.dir
-      size: 93209759
+      md5: b5933326900a2cbd75c845c0451c9f97.dir
+      size: 93209332
       nfiles: 4
     - path: reports/dvc/comparison.json
       hash: md5
-      md5: 81ad2d9d3b04063d840980c943710164
-      size: 21266776
+      md5: ac07944bb40df06d16b7ef69b8869a03
+      size: 13871879
     - path: reports/dvc/metrics.json
       hash: md5
-      md5: d81b3f02d2cdfcdefd3aac41b103af1e
-      size: 301
+      md5: ec38f6bfa1b9c8ab319f999524a1f92f
+      size: 302

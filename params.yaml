@@ -1,33 +1,18 @@
 evaluation:
   positive_threshold: 4.0
-  train_end: "2022-01-01T00:00:00Z"
-  validation_end: "2023-01-01T00:00:00Z"
+  train_end: '2022-01-01T00:00:00Z'
+  validation_end: '2023-01-01T00:00:00Z'
 
 als:
   k: 10
   trials:
-    - name: als_32
-      factors: 32
-      regularization: 0.1
-      alpha: 20.0
-      iterations: 30
-      random_state: 42
-      num_threads: 1
-    - name: als_64
-      factors: 64
-      regularization: 0.1
-      alpha: 20.0
-      iterations: 30
-      random_state: 42
-      num_threads: 1
-    - name: als_32_regularized
-      factors: 32
-      regularization: 1.0
-      alpha: 20.0
-      iterations: 30
-      random_state: 42
-      num_threads: 1
-
+  - name: als_64_alpha_10
+    factors: 64
+    regularization: 0.1
+    alpha: 10.0
+    iterations: 30
+    random_state: 42
+    num_threads: 1
 tracking:
   uri: sqlite:///mlruns.db
 
