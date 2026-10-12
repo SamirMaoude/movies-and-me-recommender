@@ -1,13 +1,11 @@
 Summary
 =======
 
-This dataset (ml-latest-small) describes 5-star rating and free-text tagging activity from [MovieLens](http://movielens.org), a movie recommendation service. It contains 100836 ratings and 3683 tag applications across 9742 movies. These data were created by 610 users between March 29, 1996 and September 24, 2018. This dataset was generated on September 26, 2018.
+This dataset (ml-32m) describes 5-star rating and free-text tagging activity from [MovieLens](http://movielens.org), a movie recommendation service. It contains 32000204 ratings and 2000072 tag applications across 87585 movies. These data were created by 200948 users between January 09, 1995 and October 12, 2023. This dataset was generated on October 13, 2023.
 
 Users were selected at random for inclusion. All selected users had rated at least 20 movies. No demographic information is included. Each user is represented by an id, and no other information is provided.
 
 The data are contained in the files `links.csv`, `movies.csv`, `ratings.csv` and `tags.csv`. More details about the contents and use of all these files follows.
-
-This is a *development* dataset. As such, it may change over time and is not an appropriate dataset for shared research results. See available *benchmark* datasets if that is your intent.
 
 This and other GroupLens data sets are publicly available for download at <http://grouplens.org/datasets/>.
 
@@ -52,6 +50,35 @@ GroupLens Research operates a movie recommender based on collaborative filtering
 
 Content and Use of Files
 ========================
+
+Verifying the Dataset Contents
+------------------------------
+
+The following files (with the provided [MD5 checksums](http://en.wikipedia.org/wiki/Md5sum)) should be present in this zip file:
+
+
+| MD5 | File |
+| --- | --- |
+| 8f033867bcb4e6be8792b21468b4fa6e | links.csv |
+| 0df90835c19151f9d819d0822e190797 | movies.csv |
+| cf12b74f9ad4b94a011f079e26d4270a | ratings.csv |
+| 963bf4fa4de6b8901868fddd3eb54567 | tags.csv |
+
+
+We encourage you to verify that the dataset you have on your computer is identical to the ones hosted at [grouplens.org](http://grouplens.org).  This is an important step if you downloaded the dataset from a location other than [grouplens.org](http://grouplens.org), or if you wish to publish research results based on analysis of the MovieLens dataset.
+
+To verify the dataset (after unzipping):
+
+    # on linux
+    md5sum *; cat checksums.txt
+
+    # on OSX
+    md5 *; cat checksums.txt
+
+    # windows users can download a tool from Microsoft (or elsewhere) that verifies MD5 checksums
+
+Check that the two lines of output contain the same hash value.
+
 
 Formatting and Encoding
 -----------------------

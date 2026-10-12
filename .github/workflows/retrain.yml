@@ -33,7 +33,8 @@ jobs:
   retrain:
     name: Train a candidate and compare it with the model in service
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    # On MovieLens 32M the train stage alone took 15 minutes on a laptop.
+    timeout-minutes: 120
     environment: retraining
     permissions:
       contents: write

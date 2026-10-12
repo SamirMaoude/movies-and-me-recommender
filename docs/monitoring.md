@@ -62,7 +62,7 @@ période sans requête ne déclenche rien.
 | `movies-and-me-throttles` | Au moins 5 requêtes rejetées en 5 minutes : les deux instances étaient occupées |
 | `movies-and-me-live-latency` | p95 de la latence de `live` au-dessus de 2 s pendant 15 minutes |
 | `movies-and-me-live-traffic` | Plus de 3 000 requêtes sur `live` en 5 minutes (10 par seconde), ce qui fait monter le coût |
-| `movies-and-me-memory` | Une instance a utilisé plus de 400 Mo sur 512 |
+| `movies-and-me-memory` | Une instance a utilisé plus de 800 Mo sur 1 024 |
 | `movies-and-me-unknown-favorites` | Sur 15 minutes et au moins 20 favoris reçus, plus de la moitié sont inconnus |
 
 Un démarrage à froid prend environ 3 secondes ; l'alarme de latence ne retient

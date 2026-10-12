@@ -2,7 +2,8 @@
 
 API de recommandations pour Movies-And-Me, basée sur ALS avec `implicit`.
 Elle reçoit les favoris sous forme d'IDs TMDB et renvoie des films recommandés.
-L'entraînement utilise MovieLens : les notes d'au moins 4/5 simulent des favoris.
+L'entraînement utilise MovieLens 32M (32 millions de notes, de 1995 à 2023) :
+les notes d'au moins 4/5 simulent des favoris.
 DVC gère les données et les modèles ; MLflow suit les entraînements et leurs versions.
 
 ## Installation
@@ -27,8 +28,9 @@ dvc remote modify --local cloud profile movies-and-me
 dvc pull -r cloud
 ```
 
-Le stockage est défini dans [.dvc/config](.dvc/config). Les CSV sont récupérés
-sous `data/raw/` et le modèle sous `artifacts/dvc/model/`.
+Le stockage est défini dans [.dvc/config](.dvc/config). Les CSV (environ 1 Go)
+sont récupérés sous `data/raw/` et le modèle sous `artifacts/dvc/model/`.
+Le pipeline complet demande environ 6 Go de mémoire et 15 minutes.
 
 ## Lancer l'API
 

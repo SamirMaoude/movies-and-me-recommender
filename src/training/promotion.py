@@ -6,6 +6,7 @@ never read.
 """
 
 import argparse
+import random
 from datetime import datetime
 from pathlib import Path
 from time import perf_counter
@@ -18,6 +19,9 @@ from src.files import write_json
 from src.models.collaborative import ImplicitRecommender
 from src.models.popularity import PopularityRecommender
 
+# Timing a fixed sample keeps the comparison short on a large validation set.
+LATENCY_SAMPLE = 200
+
 
 def measure(recommender, cases, candidate_ids, k: int, repeats: int = 5) -> dict:
     """Validation metrics, top-k catalog coverage and p95 latency of one model."""
@@ -25,9 +29,10 @@ def measure(recommender, cases, candidate_ids, k: int, repeats: int = 5) -> dict
     recommended = {
         tmdb for row in evaluation["per_user"] for tmdb in row["recommended_tmdb_ids"]
     }
+    timed = random.Random(0).sample(cases, min(len(cases), LATENCY_SAMPLE))
     timings = []
     for _ in range(repeats):
-        for case in cases:
+        for case in timed:
             start = perf_counter()
             recommender.recommend(case.favorites, n=k)
             timings.append(perf_counter() - start)

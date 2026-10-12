@@ -231,8 +231,9 @@ son modèle. Elle reste utilisable tant que son image est dans ECR, qui garde le
 
 - La concurrence réservée limite la fonction à 2 instances. Une instance traite
   une requête à la fois ; au-delà, Lambda répond `429 Too Many Requests`.
-- Chaque instance dispose de 512 Mo, dont 185 Mo environ sont utilisés, et d'une
-  part de CPU proportionnelle. Une requête est interrompue après 15 secondes.
+- Chaque instance dispose de 1 024 Mo et d'une part de CPU proportionnelle. Le
+  modèle entraîné sur MovieLens 32M ajoute environ 210 Mo en mémoire, soit
+  400 Mo environ au total. Une requête est interrompue après 15 secondes.
 - Une requête accepte au plus 500 favoris et `n` vaut au plus 50.
 - Les URL ne demandent pas d'authentification. Seuls `staging` et `live` en ont
   une, et les permissions publiques n'autorisent l'invocation que par ces URL.
@@ -253,14 +254,13 @@ aws lambda put-function-concurrency --function-name movies-and-me-recommender \
 ### Coûts
 
 Un usage modéré reste dans l'offre gratuite permanente de Lambda : un million de
-requêtes et 400 000 Go-secondes par mois. Chaque image occupe environ 175 Mo
-dans ECR ; les 10 images conservées coûtent moins de 0,20 USD par mois. Les logs
-sont gardés 14 jours.
+requêtes et 400 000 Go-secondes par mois. Les 10 images conservées dans ECR
+coûtent environ 0,10 USD par Go et par mois. Les logs sont gardés 14 jours.
 
 Au-delà, Lambda facture 0,20 USD par million de requêtes, plus le temps de
-calcul. Un flux continu de 100 requêtes par seconde coûterait environ 55 USD par
-mois. Le budget le signale dans la journée, et la commande ci-dessus arrête la
-dépense.
+calcul. Si les deux instances restaient occupées tout le mois, le calcul
+coûterait au plus 81 USD à 1 024 Mo, plus les requêtes. Le budget le signale
+dans la journée, et la commande ci-dessus arrête la dépense.
 
 ### Ressources AWS
 
@@ -268,7 +268,7 @@ dépense.
   l'envoi, conservation des 10 images les plus récentes. Sa politique autorise
   le service Lambda à lire les images pour les fonctions
   `movies-and-me-recommender*` du compte.
-- Fonction Lambda `movies-and-me-recommender` : image x86_64, 512 Mo, délai de
+- Fonction Lambda `movies-and-me-recommender` : image x86_64, 1 024 Mo, délai de
   15 secondes, concurrence réservée de 2. Son rôle d'exécution,
   `movies-and-me-recommender-lambda`, peut seulement écrire dans le groupe de
   logs `/aws/lambda/movies-and-me-recommender`.

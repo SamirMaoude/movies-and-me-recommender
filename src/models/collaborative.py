@@ -3,6 +3,7 @@
 import tempfile
 from collections.abc import Iterable
 from dataclasses import asdict, dataclass
+from itertools import islice
 from pathlib import Path
 
 import implicit
@@ -102,6 +103,7 @@ class ImplicitRecommender:
         self._item_indices = {
             tmdb: index for index, tmdb in enumerate(training_data.tmdb_ids)
         }
+        self._tmdb_array = np.asarray(training_data.tmdb_ids, dtype=np.int64)
         self._ranking = _popularity(training_data)
 
     @classmethod
@@ -138,12 +140,15 @@ class ImplicitRecommender:
             self._item_indices[tmdb] for tmdb in favorites if tmdb in self._item_indices
         )
         if not known:
-            recommendations = [
+            recommendations = (
                 {"tmdb_id": tmdb, "score": float(count)}
                 for tmdb, count in self._ranking
                 if tmdb not in favorites
-            ]
-            return {"method": "popularity", "recommendations": recommendations[:n]}
+            )
+            return {
+                "method": "popularity",
+                "recommendations": list(islice(recommendations, n)),
+            }
 
         item_count = len(self.training_data.tmdb_ids)
         profile = csr_matrix(
@@ -162,19 +167,15 @@ class ImplicitRecommender:
                 recalculate_user=True,
             )
         # Equal scores go to the smaller TMDB ID so that rankings are reproducible.
-        ranked = sorted(
-            (
-                (self.training_data.tmdb_ids[index], float(score))
-                for index, score in zip(indices, scores)
-            ),
-            key=lambda pair: (-pair[1], pair[0]),
+        # lexsort orders by its last key first, without a Python sort of the catalog.
+        tmdb_ids = self._tmdb_array[indices]
+        order = np.lexsort((tmdb_ids, -scores))
+        recommendations = (
+            {"tmdb_id": int(tmdb_ids[position]), "score": float(scores[position])}
+            for position in order
+            if int(tmdb_ids[position]) not in favorites
         )
-        recommendations = [
-            {"tmdb_id": tmdb, "score": score}
-            for tmdb, score in ranked
-            if tmdb not in favorites
-        ]
-        return {"method": "als", "recommendations": recommendations[:n]}
+        return {"method": "als", "recommendations": list(islice(recommendations, n))}
 
     def save(self, directory: str | Path, metadata: dict | None = None) -> None:
         """Write the bundle into a new directory; a failed save leaves nothing."""
