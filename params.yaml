@@ -1,7 +1,7 @@
 evaluation:
   positive_threshold: 4.0
-  train_end: "2016-03-22T08:26:11Z"
-  validation_end: "2017-06-21T07:17:25Z"
+  train_end: "2022-01-01T00:00:00Z"
+  validation_end: "2023-01-01T00:00:00Z"
 
 als:
   k: 10
