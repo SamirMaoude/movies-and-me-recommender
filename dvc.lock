@@ -9,20 +9,20 @@ stages:
       size: 216
     - path: data/raw/links.csv
       hash: md5
-      md5: 316913f95cdad64c745ca22f3630e230
-      size: 197979
+      md5: 8f033867bcb4e6be8792b21468b4fa6e
+      size: 1950748
     - path: data/raw/movies.csv
       hash: md5
-      md5: ed94fab72b62442ef8150d9446e000d6
-      size: 494431
+      md5: 0df90835c19151f9d819d0822e190797
+      size: 4242926
     - path: data/raw/ratings.csv
       hash: md5
-      md5: 325a6f09399d1c45671f187505e1a100
-      size: 2483723
+      md5: cf12b74f9ad4b94a011f079e26d4270a
+      size: 877076222
     - path: data/raw/tags.csv
       hash: md5
-      md5: 1b2d21a7be1cc23d327b11155a4a6aea
-      size: 118660
+      md5: 963bf4fa4de6b8901868fddd3eb54567
+      size: 72353890
     - path: requirements.txt
       hash: md5
       md5: 72d4168bb7ecebc7c0a38ce87e1c01a3
@@ -71,17 +71,17 @@ stages:
       params.yaml:
         evaluation:
           positive_threshold: 4.0
-          train_end: '2016-03-22T08:26:11Z'
-          validation_end: '2017-06-21T07:17:25Z'
+          train_end: '2022-01-01T00:00:00Z'
+          validation_end: '2023-01-01T00:00:00Z'
     outs:
     - path: artifacts/dvc/evaluation.json
       hash: md5
-      md5: 44adace9bcc314f9a8228f4856a475f5
+      md5: f41a898c8ab99d0fa99fcef87b267998
       size: 115
     - path: reports/dvc/data.json
       hash: md5
-      md5: 2d52655bd50ac0a6b31bc6d46aa1cacf
-      size: 2783
+      md5: 6b427890322471ecc7cafa6da2c0ba6b
+      size: 2858
   train:
     cmd: python -m src.pipeline.run train
     deps:
@@ -91,24 +91,24 @@ stages:
       size: 216
     - path: artifacts/dvc/evaluation.json
       hash: md5
-      md5: 44adace9bcc314f9a8228f4856a475f5
+      md5: f41a898c8ab99d0fa99fcef87b267998
       size: 115
     - path: data/raw/links.csv
       hash: md5
-      md5: 316913f95cdad64c745ca22f3630e230
-      size: 197979
+      md5: 8f033867bcb4e6be8792b21468b4fa6e
+      size: 1950748
     - path: data/raw/movies.csv
       hash: md5
-      md5: ed94fab72b62442ef8150d9446e000d6
-      size: 494431
+      md5: 0df90835c19151f9d819d0822e190797
+      size: 4242926
     - path: data/raw/ratings.csv
       hash: md5
-      md5: 325a6f09399d1c45671f187505e1a100
-      size: 2483723
+      md5: cf12b74f9ad4b94a011f079e26d4270a
+      size: 877076222
     - path: data/raw/tags.csv
       hash: md5
-      md5: 1b2d21a7be1cc23d327b11155a4a6aea
-      size: 118660
+      md5: 963bf4fa4de6b8901868fddd3eb54567
+      size: 72353890
     - path: requirements.txt
       hash: md5
       md5: 72d4168bb7ecebc7c0a38ce87e1c01a3
@@ -159,8 +159,8 @@ stages:
       size: 38
     - path: src/models/collaborative.py
       hash: md5
-      md5: 4f4b933f95c3fc9d1ddb30e10c7c8d54
-      size: 9996
+      md5: c2b2d36c5a61310be9522713c251689b
+      size: 10169
     - path: src/models/content_based.py
       hash: md5
       md5: 8ce8c26b0d9a23a5f07b67e41d6ca06a
@@ -219,14 +219,14 @@ stages:
     outs:
     - path: artifacts/dvc/model
       hash: md5
-      md5: 5c9df54bb95b7eff05882991888d636f.dir
-      size: 1833020
+      md5: 86d99a23f5161131bcacc2a34ab3f2b3.dir
+      size: 93209759
       nfiles: 4
     - path: reports/dvc/comparison.json
       hash: md5
-      md5: c88fb192985326c73408f59b0fa4bf2f
-      size: 83837
+      md5: 81ad2d9d3b04063d840980c943710164
+      size: 21266776
     - path: reports/dvc/metrics.json
       hash: md5
-      md5: 66b286072659fe7138e7486f69d29cbc
-      size: 267
+      md5: d81b3f02d2cdfcdefd3aac41b103af1e
+      size: 301
