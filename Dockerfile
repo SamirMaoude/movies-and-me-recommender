@@ -50,6 +50,7 @@ USER 10001:10001
 RUN python -c "from src.models.collaborative import ImplicitRecommender; ImplicitRecommender.load('/models/als')"
 
 ARG VCS_REF
+ENV APP_REVISION=${VCS_REF}
 LABEL org.opencontainers.image.source="https://github.com/SamirMaoude/movies-and-me-recommender" \
     org.opencontainers.image.revision="${VCS_REF}"
 

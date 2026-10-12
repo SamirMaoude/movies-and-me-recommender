@@ -43,6 +43,7 @@ Documentation interactive : <http://127.0.0.1:8000/docs>.
 |---|---|
 | `GET /health` | Vérifier que le modèle est prêt |
 | `GET /model/info` | Identifier le modèle chargé |
+| `GET /version` | Identifier la révision du code et le modèle |
 | `POST /recommendations` | Obtenir des recommandations |
 
 Exemple depuis un autre terminal :

@@ -82,7 +82,7 @@ jobs:
             --cap-drop ALL --security-opt no-new-privileges \
             movies-me-api:ci
       - name: Check the running API
-        run: python scripts/check_api.py --url http://127.0.0.1:8000
+        run: python scripts/check_api.py --url http://127.0.0.1:8000 --expected-revision "$GITHUB_SHA"
       - name: Show logs and remove the test container
         if: always()
         run: |
@@ -151,8 +151,8 @@ jobs:
         env:
           RUN_ID: ${{ steps.model.outputs.run-id }}
         run: |
-          python scripts/check_api.py --url http://127.0.0.1:8000 \
-            --favorite-id 27205 --expected-run-id "$RUN_ID"
+          python scripts/check_api.py --url http://127.0.0.1:8000 --favorite-id 27205 \
+            --expected-run-id "$RUN_ID" --expected-revision "$GITHUB_SHA"
       - name: Show logs and remove the test container
         if: always()
         run: |
@@ -232,8 +232,8 @@ jobs:
         env:
           RUN_ID: ${{ needs.publish.outputs.run-id }}
         run: |
-          python3 scripts/check_api.py --url http://127.0.0.1:8000 \
-            --favorite-id 27205 --expected-run-id "$RUN_ID"
+          python3 scripts/check_api.py --url http://127.0.0.1:8000 --favorite-id 27205 \
+            --expected-run-id "$RUN_ID" --expected-revision "$GITHUB_SHA"
       - name: Show logs and remove the test container
         if: always()
         run: |

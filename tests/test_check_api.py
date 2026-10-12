@@ -10,7 +10,7 @@ from scripts.check_api import check, main
 
 
 class APISmokeIdentityTests(unittest.TestCase):
-    def mock_http(self, run_id):
+    def mock_http(self, run_id, revision=None):
         identity = {"model_uri": "/models/als", "run_id": run_id}
 
         def respond(request, timeout):
@@ -20,6 +20,8 @@ class APISmokeIdentityTests(unittest.TestCase):
                 body = {"status": "ok"}
             elif path == "/model/info":
                 body = identity
+            elif path == "/version":
+                body = {"revision": revision, "model": identity}
             elif path == "/recommendations":
                 payload = json.loads(request.data)
                 if payload.get("n") == 0 or payload["favorite_movie_ids"] == [True]:
@@ -72,6 +74,25 @@ class APISmokeIdentityTests(unittest.TestCase):
         self.mock_http(None)
         with patch("builtins.print"):
             check("http://api.test", [100], 1)
+
+    def test_expected_revision_is_served(self):
+        self.mock_http("a" * 32, revision="c" * 40)
+        with patch("builtins.print"):
+            check("http://api.test", [100], 1, expected_revision="c" * 40)
+
+    def test_other_revision_is_rejected_before_recommendations(self):
+        http = self.mock_http("a" * 32, revision="d" * 40)
+        with self.assertRaisesRegex(RuntimeError, "Unexpected revision"):
+            check("http://api.test", [100], 1, expected_revision="c" * 40)
+        paths = [call.args[0].full_url for call in http.call_args_list]
+        self.assertNotIn("http://api.test/recommendations", paths)
+
+    def test_version_is_only_read_when_a_revision_is_expected(self):
+        http = self.mock_http("a" * 32)
+        with patch("builtins.print"):
+            check("http://api.test", [100], 1, expected_run_id="a" * 32)
+        paths = [call.args[0].full_url for call in http.call_args_list]
+        self.assertNotIn("http://api.test/version", paths)
 
     def test_cli_rejects_an_unexpected_run(self):
         self.mock_http("b" * 32)
