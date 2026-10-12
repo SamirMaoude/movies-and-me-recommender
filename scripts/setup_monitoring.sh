@@ -58,10 +58,10 @@ alarm movies-and-me-live-traffic "More than 10 requests per second on live, whic
   --namespace AWS/Lambda --metric-name UrlRequestCount "${live[@]}" \
   --statistic Sum --period 300 --evaluation-periods 1 \
   --comparison-operator GreaterThanThreshold --threshold 3000
-alarm movies-and-me-memory "An instance used more than 400 of its 512 MB." \
+alarm movies-and-me-memory "An instance used more than 800 of its 1024 MB." \
   --namespace "$namespace" --metric-name MaxMemoryUsed \
   --statistic Maximum --period 300 --evaluation-periods 1 \
-  --comparison-operator GreaterThanThreshold --threshold 400
+  --comparison-operator GreaterThanThreshold --threshold 800
 # The share is only meaningful once enough favorites have been received.
 alarm movies-and-me-unknown-favorites "Over 15 minutes, more than half of the favorites sent to live were missing from the training catalog." \
   --evaluation-periods 1 --comparison-operator GreaterThanThreshold --threshold 0.5 \

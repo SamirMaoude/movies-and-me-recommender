@@ -55,7 +55,7 @@
           [".", "Throttles", ".", ".", {"stat": "Sum", "label": "Requêtes rejetées (429)"}],
           ["MoviesAndMe", "MaxMemoryUsed", {"stat": "Maximum", "label": "Mémoire max (Mo)", "yAxis": "right"}]
         ],
-        "yAxis": {"right": {"min": 0, "max": 512}}
+        "yAxis": {"right": {"min": 0, "max": 1024}}
       }
     },
     {
