@@ -71,18 +71,30 @@ jobs:
           TRIALS: ${{ inputs.trials }}
         run: |
           python - <<'EOF'
+          import io
           import json
           import os
           from pathlib import Path
 
           from ruamel.yaml import YAML
 
-          # ruamel keeps the comments of params.yaml.
+          # ruamel keeps the comments of params.yaml; these settings also keep
+          # its quotes, its indentation and a blank line between sections, so
+          # that the pull request only shows the new trials.
           yaml = YAML()
+          yaml.preserve_quotes = True
+          yaml.indent(mapping=2, sequence=4, offset=2)
           path = Path("params.yaml")
           params = yaml.load(path)
           params["als"]["trials"] = json.loads(os.environ["TRIALS"])
-          yaml.dump(params, path)
+          buffer = io.StringIO()
+          yaml.dump(params, buffer)
+          lines = []
+          for line in buffer.getvalue().splitlines():
+              if lines and lines[-1] and line[:1].isalpha():
+                  lines.append("")
+              lines.append(line)
+          path.write_text("\n".join(lines) + "\n", encoding="utf-8")
           EOF
           git diff -- params.yaml
       - name: Pull the data and the model in service
