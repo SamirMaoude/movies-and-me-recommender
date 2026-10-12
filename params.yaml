@@ -30,3 +30,17 @@ als:
 
 tracking:
   uri: sqlite:///mlruns.db
+
+promotion:
+  k: 10
+  # Five seeds of the served config on the 20 validation users gave standard
+  # deviations of 0.013 for NDCG@10 and 0.0045 for Recall@10: a candidate may
+  # lose up to two of them before it is refused.
+  ndcg_tolerance: 0.025
+  recall_tolerance: 0.009
+  # Top-10 catalog coverage varied by 2 % between seeds; popularity reaches a
+  # third of the ALS coverage.
+  min_coverage_ratio: 0.8
+  # Both p95 latencies are measured in the same job.
+  max_latency_ratio: 2.0
+  min_validation_users: 20

@@ -1,0 +1,212 @@
+name: Retrain
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "data/raw/*.dvc"
+  workflow_dispatch:
+    inputs:
+      trials:
+        description: JSON list replacing als.trials in params.yaml (leave empty to keep it)
+        default: ""
+      force:
+        description: Retrain even when the data and parameters match dvc.lock
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: retrain
+  cancel-in-progress: false
+
+env:
+  OPENBLAS_NUM_THREADS: "1"
+  OMP_NUM_THREADS: "1"
+  MKL_NUM_THREADS: "1"
+  DVC_NO_ANALYTICS: "1"
+  MLFLOW_STORE: s3://movies-and-me/movies-and-me-recommender/mlflow
+
+jobs:
+  retrain:
+    name: Train a candidate and compare it with the model in service
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    environment: retraining
+    permissions:
+      contents: write
+      pull-requests: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            requirements-api.txt
+            requirements-retrain.txt
+      - name: Install the pipeline dependencies
+        run: |
+          python -m pip install -r requirements-retrain.txt
+          python -m pip check
+      - name: Get access to the DVC remote and the MLflow store
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ secrets.AWS_RETRAIN_ROLE_ARN }}
+          aws-region: eu-north-1
+          mask-aws-account-id: true
+      - name: Use the requested trials
+        if: github.event_name == 'workflow_dispatch' && inputs.trials != ''
+        env:
+          TRIALS: ${{ inputs.trials }}
+        run: |
+          python - <<'EOF'
+          import json
+          import os
+          from pathlib import Path
+
+          from ruamel.yaml import YAML
+
+          # ruamel keeps the comments of params.yaml.
+          yaml = YAML()
+          path = Path("params.yaml")
+          params = yaml.load(path)
+          params["als"]["trials"] = json.loads(os.environ["TRIALS"])
+          yaml.dump(params, path)
+          EOF
+          git diff -- params.yaml
+      - name: Pull the data and the model in service
+        run: |
+          dvc pull -r cloud
+          cp -r artifacts/dvc/model "$RUNNER_TEMP/served"
+      - name: Check whether the pipeline changed
+        id: status
+        env:
+          FORCE: ${{ inputs.force }}
+        run: |
+          # Retraining the same snapshot would only produce the same candidate.
+          if [ "$FORCE" != true ] && dvc status --quiet; then
+            echo "train=false" >> "$GITHUB_OUTPUT"
+            echo "The data and parameters match dvc.lock: nothing to retrain." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "train=true" >> "$GITHUB_OUTPUT"
+            dvc status
+          fi
+      - name: Open the MLflow store
+        if: steps.status.outputs.train == 'true'
+        run: |
+          echo "MLFLOW_TRACKING_URI=sqlite:///$RUNNER_TEMP/mlflow.db" >> "$GITHUB_ENV"
+          if aws s3 ls "$MLFLOW_STORE/mlflow.db" > /dev/null; then
+            aws s3 cp "$MLFLOW_STORE/mlflow.db" "$RUNNER_TEMP/mlflow.db"
+          fi
+          MLFLOW_TRACKING_URI="sqlite:///$RUNNER_TEMP/mlflow.db" python - <<'EOF'
+          import os
+
+          import mlflow
+
+          name = "movies-and-me-recommender"
+          if mlflow.get_experiment_by_name(name) is None:
+              mlflow.create_experiment(
+                  name, artifact_location=f"{os.environ['MLFLOW_STORE']}/artifacts"
+              )
+          EOF
+      - name: Check the data and train the candidates
+        if: steps.status.outputs.train == 'true'
+        env:
+          FORCE: ${{ inputs.force }}
+        run: |
+          if [ "$FORCE" = true ]; then
+            dvc repro --force
+          else
+            dvc repro
+          fi
+      - name: Compare the candidate with the model in service
+        id: promotion
+        if: steps.status.outputs.train == 'true'
+        run: |
+          set -o pipefail
+          python -m src.training.promotion --served "$RUNNER_TEMP/served" \
+            --output "$RUNNER_TEMP/promotion.json" | tee "$RUNNER_TEMP/promotion.md"
+      - name: Record the decision
+        if: always() && steps.promotion.outcome != 'skipped'
+        run: |
+          cat "$RUNNER_TEMP/promotion.md" >> "$GITHUB_STEP_SUMMARY"
+          python - <<'EOF'
+          import json
+          import os
+          from pathlib import Path
+
+          import mlflow
+
+          path = Path(os.environ["RUNNER_TEMP"]) / "promotion.json"
+          if path.exists():
+              decision = json.loads(path.read_text(encoding="utf-8"))
+              run_id = decision["candidate_run_id"]
+              mlflow.log_dict(decision, "promotion.json", run_id=run_id)
+              verdict = "accepted" if decision["accepted"] else "refused"
+              mlflow.MlflowClient().set_tag(run_id, "promotion", verdict)
+          EOF
+      - name: Save the MLflow store
+        if: always() && steps.status.outputs.train == 'true'
+        run: |
+          if [ -f "$RUNNER_TEMP/mlflow.db" ]; then
+            aws s3 cp "$RUNNER_TEMP/mlflow.db" "$MLFLOW_STORE/mlflow.db"
+          fi
+      - name: Push the accepted model
+        if: steps.status.outputs.train == 'true'
+        run: dvc push -r cloud
+      - name: Open a pull request with the accepted model
+        if: steps.status.outputs.train == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          run_id=$(python -c "import json, os; print(json.load(open(os.path.join(os.environ['RUNNER_TEMP'], 'promotion.json')))['candidate_run_id'])")
+          branch="retrain/${run_id:0:12}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git add dvc.lock params.yaml reports/dvc/metrics.json
+          git commit -m "model: promote ALS run $run_id" -m "Accepted by $RUN_URL"
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$branch"
+          python - "$branch" <<'EOF'
+          import json
+          import os
+          import sys
+          import urllib.request
+          from pathlib import Path
+
+          summary = (Path(os.environ["RUNNER_TEMP"]) / "promotion.md").read_text(encoding="utf-8")
+          body = (
+              f"{summary}\n\n"
+              f"Trained and compared by {os.environ['RUN_URL']}. The new model is "
+              "already in the DVC remote. Merging publishes the image and deploys it "
+              "through staging, then live; the Roll back workflow restores the "
+              "previous version."
+          )
+          request = urllib.request.Request(
+              f"{os.environ['GITHUB_API_URL']}/repos/{os.environ['GITHUB_REPOSITORY']}/pulls",
+              data=json.dumps(
+                  {
+                      "title": f"Promote the retrained ALS model ({sys.argv[1]})",
+                      "head": sys.argv[1],
+                      "base": "main",
+                      "body": body,
+                  }
+              ).encode(),
+              headers={
+                  "Authorization": f"Bearer {os.environ['GH_TOKEN']}",
+                  "Accept": "application/vnd.github+json",
+              },
+          )
+          with urllib.request.urlopen(request) as response:
+              url = json.load(response)["html_url"]
+          print(url)
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as handle:
+              handle.write(f"\nPull request: {url}\n")
+          EOF
