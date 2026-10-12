@@ -20,7 +20,11 @@ jobs:
     name: Compare live inputs with the reference period
     runs-on: ubuntu-24.04
     timeout-minutes: 10
-    environment: monitoring
+    # The environment supplies the AWS role on main only; this job deploys
+    # nothing, so it is kept out of the deployment history.
+    environment:
+      name: monitoring
+      deployment: false
     permissions:
       contents: read
       id-token: write
