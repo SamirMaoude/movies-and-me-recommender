@@ -101,6 +101,10 @@ de validation. Le rapport est dans `reports/dvc/comparison.json`.
 Pour partager les nouvelles sorties, exécuter `dvc push -r cloud` et commiter
 `params.yaml`, `dvc.lock` et les métriques mises à jour.
 
+Le workflow **Retrain** fait la même chose dans GitHub Actions, compare le
+candidat au modèle en service et propose une pull request s'il est retenu :
+voir [docs/retraining.md](docs/retraining.md).
+
 ## Suivi et registre MLflow
 
 Les entraînements sont suivis dans `mlruns.db`. Ouvrir l'interface :
