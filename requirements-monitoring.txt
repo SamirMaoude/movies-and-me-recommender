@@ -1,0 +1,2 @@
+# CloudWatch client used by scripts/compare_inputs.py.
+botocore==1.43.106
