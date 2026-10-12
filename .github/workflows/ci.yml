@@ -121,7 +121,7 @@ jobs:
           cache-dependency-path: requirements-dvc.txt
       - name: Install DVC
         run: python -m pip install -r requirements-dvc.txt
-      - name: Get read access to the DVC remote
+      - name: Get read access to the DVC remote and public images
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
@@ -135,12 +135,17 @@ jobs:
           run_id=$(python -c "import json; print(json.load(open('artifacts/dvc/model/manifest.json'))['metadata']['run_id'])")
           echo "run-id=$run_id" >> "$GITHUB_OUTPUT"
       - name: Build the image
-        # Lambda accepts a single image manifest, without an attestation.
+        # Lambda accepts a single image manifest, without an attestation. The web
+        # adapter comes from Amazon ECR Public, whose anonymous pulls share a
+        # monthly data limit per IP address that GitHub runners sometimes exhaust.
         run: |
+          aws ecr-public get-login-password --region us-east-1 \
+            | docker login public.ecr.aws --username AWS --password-stdin
           docker build --pull --provenance=false --target deployment \
             --build-context model=artifacts/dvc/model \
             --build-arg "VCS_REF=$GITHUB_SHA" \
             --tag "$IMAGE" .
+          docker logout public.ecr.aws
       - name: Start the API
         run: |
           docker run --detach --name movies-me-api \

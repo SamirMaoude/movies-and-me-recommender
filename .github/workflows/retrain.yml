@@ -35,7 +35,11 @@ jobs:
     runs-on: ubuntu-24.04
     # On MovieLens 32M the train stage alone took 15 minutes on a laptop.
     timeout-minutes: 120
-    environment: retraining
+    # The environment supplies the AWS role on main only; this job deploys
+    # nothing, so it is kept out of the deployment history.
+    environment:
+      name: retraining
+      deployment: false
     permissions:
       contents: write
       pull-requests: write
