@@ -82,7 +82,7 @@ jobs:
             --cap-drop ALL --security-opt no-new-privileges \
             movies-me-api:ci
       - name: Check the running API
-        run: python scripts/check_api.py --url http://127.0.0.1:8000
+        run: python scripts/check_api.py --url http://127.0.0.1:8000 --expected-revision "$GITHUB_SHA"
       - name: Show logs and remove the test container
         if: always()
         run: |
@@ -135,8 +135,9 @@ jobs:
           run_id=$(python -c "import json; print(json.load(open('artifacts/dvc/model/manifest.json'))['metadata']['run_id'])")
           echo "run-id=$run_id" >> "$GITHUB_OUTPUT"
       - name: Build the image
+        # Lambda accepts a single image manifest, without an attestation.
         run: |
-          docker build --pull --target deployment \
+          docker build --pull --provenance=false --target deployment \
             --build-context model=artifacts/dvc/model \
             --build-arg "VCS_REF=$GITHUB_SHA" \
             --tag "$IMAGE" .
@@ -151,8 +152,8 @@ jobs:
         env:
           RUN_ID: ${{ steps.model.outputs.run-id }}
         run: |
-          python scripts/check_api.py --url http://127.0.0.1:8000 \
-            --favorite-id 27205 --expected-run-id "$RUN_ID"
+          python scripts/check_api.py --url http://127.0.0.1:8000 --favorite-id 27205 \
+            --expected-run-id "$RUN_ID" --expected-revision "$GITHUB_SHA"
       - name: Show logs and remove the test container
         if: always()
         run: |
@@ -232,8 +233,8 @@ jobs:
         env:
           RUN_ID: ${{ needs.publish.outputs.run-id }}
         run: |
-          python3 scripts/check_api.py --url http://127.0.0.1:8000 \
-            --favorite-id 27205 --expected-run-id "$RUN_ID"
+          python3 scripts/check_api.py --url http://127.0.0.1:8000 --favorite-id 27205 \
+            --expected-run-id "$RUN_ID" --expected-revision "$GITHUB_SHA"
       - name: Show logs and remove the test container
         if: always()
         run: |
@@ -241,3 +242,64 @@ jobs:
             docker logs movies-me-api || true
             docker rm --force movies-me-api
           fi
+
+  deploy:
+    name: Deploy to AWS Lambda
+    needs: [publish, check-published]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    # Deployments and rollbacks move the same aliases, one run at a time.
+    concurrency:
+      group: lambda-live
+      cancel-in-progress: false
+    environment:
+      name: production
+      url: ${{ steps.release.outputs.url }}
+    permissions:
+      contents: read
+      id-token: write
+      packages: read
+    env:
+      REPOSITORY: movies-and-me-recommender
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - name: Get deployment access to AWS
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: eu-north-1
+          mask-aws-account-id: true
+      - name: Copy the checked image to ECR
+        id: copy
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SOURCE: ${{ needs.publish.outputs.image }}
+        run: |
+          registry="$(aws sts get-caller-identity --query Account --output text).dkr.ecr.eu-north-1.amazonaws.com"
+          # ECR tags are immutable, so a re-run reuses the copy made earlier.
+          if ! aws ecr describe-images --repository-name "$REPOSITORY" \
+            --image-ids "imageTag=$GITHUB_SHA" > /dev/null 2>&1; then
+            printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+            aws ecr get-login-password | docker login "$registry" --username AWS --password-stdin
+            # By default, imagetools would wrap the image in a new index.
+            docker buildx imagetools create --prefer-index=false \
+              --tag "$registry/$REPOSITORY:$GITHUB_SHA" "$SOURCE"
+            docker logout ghcr.io
+            docker logout "$registry"
+          fi
+          digest=$(aws ecr describe-images --repository-name "$REPOSITORY" \
+            --image-ids "imageTag=$GITHUB_SHA" --query 'imageDetails[0].imageDigest' --output text)
+          test "$digest" = "${SOURCE##*@}"
+          echo "image=$registry/$REPOSITORY@$digest" >> "$GITHUB_OUTPUT"
+      - name: Deploy through staging, then live
+        env:
+          IMAGE: ${{ steps.copy.outputs.image }}
+          RUN_ID: ${{ needs.publish.outputs.run-id }}
+        run: scripts/deploy_lambda.sh deploy "$IMAGE" "$GITHUB_SHA" "$RUN_ID"
+      - name: Record the release
+        id: release
+        run: |
+          echo "url=$(scripts/deploy_lambda.sh url live)" >> "$GITHUB_OUTPUT"
+          scripts/deploy_lambda.sh status >> "$GITHUB_STEP_SUMMARY"

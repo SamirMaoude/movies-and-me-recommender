@@ -1,5 +1,7 @@
 """Register native ALS bundles and load a pinned model for evaluation or serving."""
 
+from __future__ import annotations
+
 import argparse
 import json
 import re
@@ -7,13 +9,16 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import TYPE_CHECKING
 
 import numpy as np
-from mlflow.artifacts import download_artifacts
-from mlflow.exceptions import MlflowException
-from mlflow.tracking import MlflowClient
 
 from src.models.collaborative import ImplicitRecommender
+
+# MLflow takes seconds to import, so it is imported where it is used: the API
+# serves a local bundle and never needs it.
+if TYPE_CHECKING:
+    from mlflow.tracking import MlflowClient
 
 DEFAULT_MODEL_NAME = "movies-and-me-als"
 
@@ -35,8 +40,16 @@ class LoadedRecommender:
         return self.model.recommend_with_method(favorites, n=n)
 
 
+def _client(tracking_uri: str | None, registry_uri: str | None) -> MlflowClient:
+    from mlflow.tracking import MlflowClient
+
+    return MlflowClient(tracking_uri=tracking_uri, registry_uri=registry_uri)
+
+
 def _load_run_model(client: MlflowClient, uri: str, run_id: str) -> ImplicitRecommender:
     """Load a bundle logged by a finished run, whose manifest must name that run."""
+    from mlflow.artifacts import download_artifacts
+
     if client.get_run(run_id).info.status != "FINISHED":
         raise ValueError("Only a FINISHED MLflow run can supply a model.")
     # Load all arrays before the temporary download directory is removed.
@@ -59,7 +72,7 @@ def load_recommender(
     """Load a local bundle, a run's bundle, or a registered version or alias."""
     uri = str(source)
     if uri.startswith("models:/"):
-        client = MlflowClient(tracking_uri=tracking_uri, registry_uri=registry_uri)
+        client = _client(tracking_uri, registry_uri)
         if match := re.fullmatch(r"models:/([^/@?#]+)/([1-9]\d*)", uri):
             name, version = match.groups()
             registered = client.get_model_version(name, version)
@@ -84,7 +97,7 @@ def load_recommender(
         match = re.fullmatch(r"runs:/([0-9a-fA-F]{32})/model", uri)
         if match is None:
             raise ValueError("Use runs:/<run_id>/model for a logged ALS bundle.")
-        client = MlflowClient(tracking_uri=tracking_uri, registry_uri=registry_uri)
+        client = _client(tracking_uri, registry_uri)
         model = _load_run_model(client, uri, match.group(1))
         return LoadedRecommender(model, uri, run_id=match.group(1))
     directory = Path(uri).resolve()
@@ -144,7 +157,9 @@ def register_model(
     registry_uri: str | None = None,
 ) -> dict:
     """Register a run's bundle, verify the registered copy, then move the alias."""
-    client = MlflowClient(tracking_uri=tracking_uri, registry_uri=registry_uri)
+    from mlflow.exceptions import MlflowException
+
+    client = _client(tracking_uri, registry_uri)
     source = f"runs:/{run_id}/model"
     # Loading the runs:/ URI first also validates run_id before the search
     # filter below interpolates it.
@@ -190,6 +205,8 @@ def register_model(
 
 
 def main() -> None:
+    from mlflow.exceptions import MlflowException
+
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
     register = commands.add_parser(

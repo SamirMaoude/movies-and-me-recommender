@@ -43,3 +43,10 @@ class RecommendationResponse(BaseModel):
 
 class HealthResponse(BaseModel):
     status: Literal["ok"] = "ok"
+
+
+class VersionInfo(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    revision: str | None = None
+    model: ModelInfo

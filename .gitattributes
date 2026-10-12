@@ -5,3 +5,4 @@
 /dvc.yaml text eol=lf
 /dvc.lock text eol=lf
 /reports/dvc/metrics.json text eol=lf
+/scripts/*.sh text eol=lf

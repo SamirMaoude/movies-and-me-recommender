@@ -108,6 +108,7 @@ class RecommendationAPITests(unittest.TestCase):
         self.addCleanup(client.close)
         self.assertEqual(client.get("/health").status_code, 503)
         self.assertEqual(client.get("/model/info").status_code, 503)
+        self.assertEqual(client.get("/version").status_code, 503)
         self.assertEqual(
             client.post(
                 "/recommendations", json={"favorite_movie_ids": []}
@@ -278,12 +279,29 @@ class RecommendationAPITests(unittest.TestCase):
         self.assertEqual(info["model_uri"], "models:/movies-and-me-als/7")
         self.assertEqual(response.json()["model"], info)
 
+    def test_version_reports_the_revision_and_the_model(self):
+        with patch.dict(os.environ, {"APP_REVISION": "b" * 40}):
+            with TestClient(self.app()) as client:
+                info = client.get("/model/info").json()
+                self.assertEqual(
+                    client.get("/version").json(), {"revision": "b" * 40, "model": info}
+                )
+            with TestClient(self.app(revision="c" * 40)) as client:
+                self.assertEqual(client.get("/version").json()["revision"], "c" * 40)
+            os.environ["APP_REVISION"] = ""
+            with TestClient(self.app()) as client:
+                self.assertIsNone(client.get("/version").json()["revision"])
+            del os.environ["APP_REVISION"]
+            with TestClient(self.app()) as client:
+                self.assertIsNone(client.get("/version").json()["revision"])
+
     def test_interactive_documentation_describes_the_routes(self):
         with TestClient(self.app()) as client:
             self.assertEqual(client.get("/docs").status_code, 200)
             schema = client.get("/openapi.json").json()
         self.assertEqual(
-            set(schema["paths"]), {"/health", "/model/info", "/recommendations"}
+            set(schema["paths"]),
+            {"/health", "/model/info", "/recommendations", "/version"},
         )
 
 

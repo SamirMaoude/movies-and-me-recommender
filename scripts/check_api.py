@@ -32,6 +32,7 @@ def check(
     favorites: list[int],
     timeout: float,
     expected_run_id: str | None = None,
+    expected_revision: str | None = None,
 ) -> None:
     deadline = time.monotonic() + timeout
     last_error = "No response"
@@ -55,6 +56,17 @@ def check(
             f"Unexpected model run_id: expected {expected_run_id!r}, "
             f"got {identity.get('run_id')!r}",
         )
+    details = f"model={identity}"
+    if expected_revision is not None:
+        status, version = request(url, "/version")
+        require(status == 200, f"/version returned {status}")
+        require(
+            version.get("revision") == expected_revision,
+            f"Unexpected revision: expected {expected_revision!r}, "
+            f"got {version.get('revision')!r}",
+        )
+        require(version.get("model") == identity, "Version reports another model")
+        details = f"revision={expected_revision}, {details}"
     status, response = request(
         url,
         "/recommendations",
@@ -93,7 +105,7 @@ def check(
         url, "/recommendations", {"favorite_movie_ids": favorites, "n": 0}
     )
     require(status == 422, "Invalid limit was not rejected")
-    print(f"API checks passed: ALS, fallback, validation; model={identity}")
+    print(f"API checks passed: ALS, fallback, validation; {details}")
 
 
 def main() -> None:
@@ -104,10 +116,19 @@ def main() -> None:
     parser.add_argument(
         "--expected-run-id", help="Require this MLflow run ID in /model/info"
     )
+    parser.add_argument(
+        "--expected-revision", help="Require this code revision in /version"
+    )
     args = parser.parse_args()
     if args.timeout <= 0:
         parser.error("--timeout must be positive")
-    check(args.url, args.favorite_id or [100], args.timeout, args.expected_run_id)
+    check(
+        args.url,
+        args.favorite_id or [100],
+        args.timeout,
+        args.expected_run_id,
+        args.expected_revision,
+    )
 
 
 if __name__ == "__main__":

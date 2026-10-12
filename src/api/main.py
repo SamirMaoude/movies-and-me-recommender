@@ -13,6 +13,7 @@ from src.api.schemas import (
     ModelInfo,
     RecommendationRequest,
     RecommendationResponse,
+    VersionInfo,
 )
 from src.api.service import RecommendationService
 
@@ -42,6 +43,7 @@ def create_app(
     *,
     tracking_uri: str | None = None,
     registry_uri: str | None = None,
+    revision: str | None = None,
     service_factory: Callable[..., RecommendationService] | None = None,
 ) -> FastAPI:
     """Create the API; the model is loaded when the application starts."""
@@ -55,12 +57,15 @@ def create_app(
                 tracking_uri=_setting(tracking_uri, "MLFLOW_TRACKING_URI"),
                 registry_uri=_setting(registry_uri, "MLFLOW_REGISTRY_URI"),
             )
+            # An image built without VCS_REF has an empty APP_REVISION.
+            application.state.revision = _setting(revision, "APP_REVISION") or None
             yield
         finally:
             application.state.service = None
 
     application = FastAPI(title="Movies & Me Recommender", lifespan=lifespan)
     application.state.service = None
+    application.state.revision = None
 
     @application.get("/health", response_model=HealthResponse)
     def health(service: ReadyService) -> HealthResponse:
@@ -71,6 +76,13 @@ def create_app(
     def model_info(service: ReadyService) -> ModelInfo:
         """Return the identity of the model loaded for this process."""
         return service.model_info
+
+    @application.get("/version", response_model=VersionInfo)
+    def version(request: Request, service: ReadyService) -> VersionInfo:
+        """Return the code revision and the model served by this process."""
+        return VersionInfo(
+            revision=request.app.state.revision, model=service.model_info
+        )
 
     @application.post("/recommendations", response_model=RecommendationResponse)
     def recommendations(
