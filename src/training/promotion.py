@@ -59,12 +59,9 @@ def decide(candidate: dict, served: dict, rules: dict) -> list[dict]:
             ">=",
             served["catalog_coverage"] * rules["min_coverage_ratio"],
         ),
-        (
-            "p95 latency (ms)",
-            "p95_ms",
-            "<=",
-            served["p95_ms"] * rules["max_latency_ratio"],
-        ),
+        # An absolute budget: a larger catalog is slower to rank by nature, and a
+        # limit relative to the served model would block it.
+        ("p95 latency (ms)", "p95_ms", "<=", rules["max_p95_ms"]),
     ]
     return [
         {
