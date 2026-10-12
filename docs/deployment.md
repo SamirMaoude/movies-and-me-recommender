@@ -185,7 +185,9 @@ curl -s -X POST "$API/recommendations" \
 
 `/version` donne le commit et le modèle servis. L'extension Lambda Web Adapter,
 incluse dans l'image, transmet les requêtes à Uvicorn. Après une période sans
-trafic, la première requête démarre une instance en 2 à 3 secondes.
+trafic, la première requête démarre une instance : 2,4 s d'initialisation
+mesurées, 3 s de bout en bout depuis la France. Juste après un déploiement,
+Lambda télécharge encore l'image : les premiers démarrages ont pris 6 à 7 s.
 
 ### Déploiement automatique
 
@@ -240,9 +242,9 @@ son modèle. Elle reste utilisable tant que son image est dans ECR, qui garde le
 - La concurrence réservée limite la fonction à 2 instances. Une instance traite
   une requête à la fois ; au-delà, Lambda répond `429 Too Many Requests`.
 - Chaque instance dispose de 1 024 Mo et d'une part de CPU proportionnelle. Avec
-  le bundle complet du modèle MovieLens 32M, l'API utilisait 582 Mo et démarrait
-  en 5,5 s ; la copie de service réduit le modèle chargé de 191 Mo à 26 Mo en
-  mesure locale. Une requête est interrompue après 15 secondes.
+  la copie de service du modèle MovieLens 32M, l'API utilise 228 Mo (582 Mo avec
+  le bundle complet). Une recommandation prend 30 à 80 ms dans Lambda. Une
+  requête est interrompue après 15 secondes.
 - Une requête accepte au plus 500 favoris et `n` vaut au plus 50.
 - Les URL ne demandent pas d'authentification. Seuls `staging` et `live` en ont
   une, et les permissions publiques n'autorisent l'invocation que par ces URL.
