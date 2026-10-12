@@ -46,27 +46,31 @@ Les règles sont dans la section `promotion` de `params.yaml` :
 
 | Contrôle | Règle |
 |---|---|
-| Utilisateurs de validation | Au moins 20 |
-| NDCG@10 | Au plus 0,025 sous le modèle en service |
-| Recall@10 | Au plus 0,009 sous le modèle en service |
-| Couverture du catalogue dans les top 10 | Au moins 80 % de celle du modèle en service |
+| Utilisateurs de validation | Au moins 1 000 |
+| NDCG@10 | Au plus 0,002 sous le modèle en service |
+| Recall@10 | Au plus 0,002 sous le modèle en service |
+| Couverture du catalogue dans les top 10 | Au moins 90 % de celle du modèle en service |
 | Temps de réponse p95 | Au plus le double du modèle en service, mesuré dans le même job |
 
-Ces seuils viennent des résultats observés. La validation ne compte que
-20 utilisateurs : en réentraînant la configuration en service avec cinq
-graines aléatoires, NDCG@10 a varié de 0,029 à 0,062 (écart type 0,013) et
-Recall@10 de 0,042 à 0,053 (écart type 0,0045). Le modèle en service
-correspond à la meilleure graine. Les tolérances valent deux écarts types :
-exiger un candidat meilleur que lui refuserait la plupart des réentraînements
-par simple hasard. La couverture n'a varié que de 2 % et les temps de réponse
-de 5 à 6 ms.
+Ces seuils viennent des résultats observés sur MovieLens 32M : entraînement
+avant 2022, validation en 2022, soit 5 599 utilisateurs et 49 208 films au
+catalogue. En réentraînant `als_64` avec cinq graines aléatoires :
 
-Un modèle volontairement dégradé (1 facteur, 1 itération) obtient NDCG@10
-0,026, Recall@10 0,014 et une couverture de 0,6 % contre 3,1 % : il échoue sur
-trois contrôles. La popularité, affichée pour référence, obtient NDCG@10 0,039.
+| | NDCG@10 | Recall@10 | Couverture | p95 |
+|---|---|---|---|---|
+| `als_64`, 5 graines | 0,0719 à 0,0739 (écart type 0,0009) | 0,0414 à 0,0431 (écart type 0,0008) | 4,7 % | 14 à 24 ms |
+| Popularité | 0,0468 | 0,0249 | 0,26 % | 6 ms |
+| Modèle dégradé (1 facteur, 1 itération) | 0,0474 | 0,0264 | 0,25 % | 13 ms |
 
-Avec si peu d'utilisateurs de validation, ces contrôles écartent un modèle
-nettement moins bon, mais ne prouvent pas qu'un candidat est meilleur.
+Les tolérances valent un peu plus de deux écarts types. Le modèle dégradé
+échoue sur NDCG, Recall et couverture. Le gain d'ALS sur la popularité est net :
++0,026 de NDCG@10 (intervalle de confiance à 95 % : +0,022 à +0,030) et +0,017
+de Recall@10 (+0,013 à +0,020). Les temps de réponse varient d'une exécution à
+l'autre, d'où la marge du double.
+
+Avec l'ancien jeu (ml-latest-small), la validation ne comptait que
+20 utilisateurs : NDCG@10 variait de 0,029 à 0,062 selon la graine, et l'écart
+avec la popularité n'était pas démontré.
 
 ## Suivi MLflow
 

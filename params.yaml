@@ -33,14 +33,16 @@ tracking:
 
 promotion:
   k: 10
-  # Five seeds of the served config on the 20 validation users gave standard
-  # deviations of 0.013 for NDCG@10 and 0.0045 for Recall@10: a candidate may
-  # lose up to two of them before it is refused.
-  ndcg_tolerance: 0.025
-  recall_tolerance: 0.009
-  # Top-10 catalog coverage varied by 2 % between seeds; popularity reaches a
-  # third of the ALS coverage.
-  min_coverage_ratio: 0.8
-  # Both p95 latencies are measured in the same job.
+  # On MovieLens 32M, five seeds of als_64 on the 5,599 validation users gave
+  # standard deviations of 0.0009 for NDCG@10 and 0.0008 for Recall@10: a
+  # candidate may lose a little more than two of them before it is refused.
+  ndcg_tolerance: 0.002
+  recall_tolerance: 0.002
+  # Top-10 catalog coverage varied by 0.5 % between seeds; popularity and a
+  # degraded model reach about 5 % of the ALS coverage.
+  min_coverage_ratio: 0.9
+  # Both p95 latencies are measured in the same job; between runs on one
+  # machine they varied from 14 to 24 ms.
   max_latency_ratio: 2.0
-  min_validation_users: 20
+  # Far fewer users would mean that the split or the data changed shape.
+  min_validation_users: 1000
