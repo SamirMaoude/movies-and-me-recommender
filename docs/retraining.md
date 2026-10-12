@@ -50,7 +50,7 @@ Les règles sont dans la section `promotion` de `params.yaml` :
 | NDCG@10 | Au plus 0,002 sous le modèle en service |
 | Recall@10 | Au plus 0,002 sous le modèle en service |
 | Couverture du catalogue dans les top 10 | Au moins 90 % de celle du modèle en service |
-| Temps de réponse p95 | Au plus le double du modèle en service, mesuré dans le même job |
+| Temps de réponse p95 | Au plus 60 ms, mesuré dans le job sur 200 profils de validation |
 
 Ces seuils viennent des résultats observés sur MovieLens 32M : entraînement
 avant 2022, validation en 2022, soit 5 599 utilisateurs et 49 208 films au
@@ -65,8 +65,15 @@ catalogue. En réentraînant `als_64` avec cinq graines aléatoires :
 Les tolérances valent un peu plus de deux écarts types. Le modèle dégradé
 échoue sur NDCG, Recall et couverture. Le gain d'ALS sur la popularité est net :
 +0,026 de NDCG@10 (intervalle de confiance à 95 % : +0,022 à +0,030) et +0,017
-de Recall@10 (+0,013 à +0,020). Les temps de réponse varient d'une exécution à
-l'autre, d'où la marge du double.
+de Recall@10 (+0,013 à +0,020).
+
+Le temps de réponse a un plafond absolu, et non une limite relative au modèle
+en service : un catalogue plus grand est forcément plus long à classer. Le
+premier réentraînement sur MovieLens 32M a ainsi été refusé avec une limite
+au double du modèle en service : 28,6 ms contre 12,3 ms pour un modèle qui ne
+classait que 5 000 films, alors qu'il gagnait sur tous les autres contrôles.
+Le plafond de 60 ms laisse environ deux fois ce temps, qui variait de 14 à
+24 ms d'une exécution à l'autre sur un portable.
 
 Avec l'ancien jeu (ml-latest-small), la validation ne comptait que
 20 utilisateurs : NDCG@10 variait de 0,029 à 0,062 selon la graine, et l'écart

@@ -41,8 +41,9 @@ promotion:
   # Top-10 catalog coverage varied by 0.5 % between seeds; popularity and a
   # degraded model reach about 5 % of the ALS coverage.
   min_coverage_ratio: 0.9
-  # Both p95 latencies are measured in the same job; between runs on one
-  # machine they varied from 14 to 24 ms.
-  max_latency_ratio: 2.0
+  # p95 of one request, timed in the job on 200 validation profiles. The 32M
+  # model measured 28.6 ms on a GitHub runner and 14 to 24 ms between runs on
+  # a laptop; the budget leaves about twice that.
+  max_p95_ms: 60
   # Far fewer users would mean that the split or the data changed shape.
   min_validation_users: 1000

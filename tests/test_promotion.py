@@ -22,7 +22,7 @@ RULES = {
     "ndcg_tolerance": 0.025,
     "recall_tolerance": 0.009,
     "min_coverage_ratio": 0.8,
-    "max_latency_ratio": 2.0,
+    "max_p95_ms": 60.0,
     "min_validation_users": 1,
 }
 FILES = {
@@ -69,8 +69,15 @@ class DecisionTests(unittest.TestCase):
         ]
         self.assertEqual(failed, ["ndcg_at_10", "recall_at_10", "catalog coverage"])
 
+    def test_slower_ranking_of_a_larger_catalog_stays_within_the_budget(self):
+        # The MovieLens 32M candidate against the model of the small dataset.
+        served = metrics(0.0518, 0.0274, 0.0156, 12.3)
+        candidate = metrics(0.0728, 0.0415, 0.0474, 28.6)
+        checks = decide(candidate, served, RULES)
+        self.assertTrue(all(check["passed"] for check in checks))
+
     def test_slow_candidate_and_small_cohort_are_refused(self):
-        candidate = metrics(0.062, 0.048, 0.0306, 12.5, users=19)
+        candidate = metrics(0.062, 0.048, 0.0306, 75.0, users=19)
         failed = [
             check["check"]
             for check in decide(
