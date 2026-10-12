@@ -51,3 +51,6 @@ class RecommendationService:
             method=result["method"],
             model=self._model_info,
         )
+
+    def count_known(self, favorite_movie_ids: list[int]) -> int:
+        return self._loaded.model.count_known(favorite_movie_ids)

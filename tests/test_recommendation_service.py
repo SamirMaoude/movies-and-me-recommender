@@ -81,6 +81,16 @@ class RecommendationServiceTests(unittest.TestCase):
                 self.assertFalse(set(ids).intersection(favorites))
                 self.assertEqual(actual["model"], self.service.model_info.model_dump())
 
+    def test_known_favorites_are_counted_once_from_the_catalog(self):
+        for favorites, known in (
+            ([], 0),
+            ([999], 0),
+            ([100, 100, 999], 1),
+            ([100, 200, 300, 400, 500, 600], 6),
+        ):
+            with self.subTest(favorites=favorites):
+                self.assertEqual(self.service.count_known(favorites), known)
+
     def test_accepts_boundaries_and_returns_only_available_movies(self):
         self.assertEqual(len(self.service.recommend([], n=1).recommendations), 1)
         result = self.service.recommend([100] * 500, n=50)
